@@ -30,6 +30,12 @@ TOOL_REQUIRED_SCOPES = {
     "pull_request_read": ["repo"],
     "list_pull_requests": ["repo"],
     "search_pull_requests": ["repo"],
+    "create_pull_request": ["repo"],
+    "update_pull_request": ["repo"],
+    "merge_pull_request": ["repo"],
+    "update_pull_request_branch": ["repo"],
+    "pull_request_review_write": ["repo"],
+    "add_reply_to_pull_request_comment": ["repo"],
 }
 
 

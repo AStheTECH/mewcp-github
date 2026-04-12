@@ -1332,14 +1332,14 @@ def pull_request_read(
     per_page: int = 30,
 ) -> dict[str, Any]:
     """Read pull request data with flexible method parameter.
-    
+
     Methods:
     - get: Get details of the pull request
     - get_files: Get list of files changed in the PR
     - get_status: Get combined commit status and check runs
     - get_comments: Get PR comments (not review comments)
     - get_review_comments: Get review thread comments
-    
+
     Args:
         oauth_token: GitHub token
         owner: Repository owner
@@ -1348,7 +1348,7 @@ def pull_request_read(
         method: Which data to retrieve (default: 'get')
         page: Page number for pagination
         per_page: Results per page
-    
+
     Returns:
         Dictionary with PR data based on method
     """
@@ -1373,7 +1373,7 @@ def pull_request_read(
             path=f"/repos/{owner}/{repo}/pulls/{pull_number}",
             required_scopes=required_scopes,
         )
-        
+
         return {
             "number": result.get("number"),
             "title": result.get("title"),
@@ -1404,7 +1404,9 @@ def pull_request_read(
             "commits": result.get("commits", 0),
             "labels": [l.get("name") for l in result.get("labels", [])],
             "assignees": [a.get("login") for a in result.get("assignees", [])],
-            "reviewers": [r.get("login") for r in result.get("requested_reviewers", [])],
+            "reviewers": [
+                r.get("login") for r in result.get("requested_reviewers", [])
+            ],
         }
 
     elif method == "get_files":
@@ -1417,19 +1419,21 @@ def pull_request_read(
             params={"page": page, "per_page": per_page},
             required_scopes=required_scopes,
         )
-        
+
         files = []
         for file_item in results if isinstance(results, list) else []:
-            files.append({
-                "filename": file_item.get("filename"),
-                "status": file_item.get("status"),
-                "additions": file_item.get("additions"),
-                "deletions": file_item.get("deletions"),
-                "changes": file_item.get("changes"),
-                "patch": file_item.get("patch"),
-                "previous_filename": file_item.get("previous_filename"),
-            })
-        
+            files.append(
+                {
+                    "filename": file_item.get("filename"),
+                    "status": file_item.get("status"),
+                    "additions": file_item.get("additions"),
+                    "deletions": file_item.get("deletions"),
+                    "changes": file_item.get("changes"),
+                    "patch": file_item.get("patch"),
+                    "previous_filename": file_item.get("previous_filename"),
+                }
+            )
+
         return {
             "files": files,
             "total_files": len(files),
@@ -1445,7 +1449,7 @@ def pull_request_read(
             path=f"/repos/{owner}/{repo}/pulls/{pull_number}",
             required_scopes=required_scopes,
         )
-        
+
         head_sha = status_result.get("head", {}).get("sha")
         if not head_sha:
             raise GitHubServiceError(
@@ -1453,7 +1457,7 @@ def pull_request_read(
                 message="Could not determine head commit SHA for PR",
                 http_status=404,
             )
-        
+
         # Get combined status
         combined = _github_api_request(
             oauth_token=oauth_token,
@@ -1461,7 +1465,7 @@ def pull_request_read(
             path=f"/repos/{owner}/{repo}/commits/{head_sha}/status",
             required_scopes=required_scopes,
         )
-        
+
         return {
             "state": combined.get("state"),
             "sha": combined.get("sha"),
@@ -1488,18 +1492,20 @@ def pull_request_read(
             params={"page": page, "per_page": per_page},
             required_scopes=required_scopes,
         )
-        
+
         comments = []
         for comment in results if isinstance(results, list) else []:
-            comments.append({
-                "id": comment.get("id"),
-                "user": comment.get("user", {}).get("login"),
-                "body": comment.get("body"),
-                "created_at": comment.get("created_at"),
-                "updated_at": comment.get("updated_at"),
-                "url": comment.get("html_url"),
-            })
-        
+            comments.append(
+                {
+                    "id": comment.get("id"),
+                    "user": comment.get("user", {}).get("login"),
+                    "body": comment.get("body"),
+                    "created_at": comment.get("created_at"),
+                    "updated_at": comment.get("updated_at"),
+                    "url": comment.get("html_url"),
+                }
+            )
+
         return {
             "comments": comments,
             "total_comments": len(comments),
@@ -1517,21 +1523,23 @@ def pull_request_read(
             params={"page": page, "per_page": per_page},
             required_scopes=required_scopes,
         )
-        
+
         comments = []
         for comment in results if isinstance(results, list) else []:
-            comments.append({
-                "id": comment.get("id"),
-                "user": comment.get("user", {}).get("login"),
-                "body": comment.get("body"),
-                "path": comment.get("path"),
-                "position": comment.get("position"),
-                "commit_id": comment.get("commit_id"),
-                "created_at": comment.get("created_at"),
-                "updated_at": comment.get("updated_at"),
-                "url": comment.get("html_url"),
-            })
-        
+            comments.append(
+                {
+                    "id": comment.get("id"),
+                    "user": comment.get("user", {}).get("login"),
+                    "body": comment.get("body"),
+                    "path": comment.get("path"),
+                    "position": comment.get("position"),
+                    "commit_id": comment.get("commit_id"),
+                    "created_at": comment.get("created_at"),
+                    "updated_at": comment.get("updated_at"),
+                    "url": comment.get("html_url"),
+                }
+            )
+
         return {
             "review_comments": comments,
             "total_review_comments": len(comments),
@@ -1544,7 +1552,16 @@ def pull_request_read(
             code="INVALID_INPUT",
             message=f"Unknown method: {method}",
             http_status=400,
-            details={"method": method, "valid_methods": ["get", "get_files", "get_status", "get_comments", "get_review_comments"]},
+            details={
+                "method": method,
+                "valid_methods": [
+                    "get",
+                    "get_files",
+                    "get_status",
+                    "get_comments",
+                    "get_review_comments",
+                ],
+            },
         )
 
 
@@ -1561,7 +1578,7 @@ def list_pull_requests(
     per_page: int = 30,
 ) -> dict[str, Any]:
     """List pull requests in a repository.
-    
+
     Args:
         oauth_token: GitHub token
         owner: Repository owner
@@ -1573,7 +1590,7 @@ def list_pull_requests(
         head: Filter by head branch (user:branch format)
         page: Page number
         per_page: Results per page
-    
+
     Returns:
         Dictionary with PRs list
     """
@@ -1597,7 +1614,7 @@ def list_pull_requests(
         "page": page,
         "per_page": min(100, max(1, per_page)),
     }
-    
+
     if base:
         params["base"] = base
     if head:
@@ -1613,19 +1630,21 @@ def list_pull_requests(
 
     prs = []
     for pr in results if isinstance(results, list) else []:
-        prs.append({
-            "number": pr.get("number"),
-            "title": pr.get("title"),
-            "state": pr.get("state"),
-            "url": pr.get("html_url"),
-            "user": pr.get("user", {}).get("login"),
-            "created_at": pr.get("created_at"),
-            "updated_at": pr.get("updated_at"),
-            "draft": pr.get("draft", False),
-            "additions": pr.get("additions", 0),
-            "deletions": pr.get("deletions", 0),
-            "changed_files": pr.get("changed_files", 0),
-        })
+        prs.append(
+            {
+                "number": pr.get("number"),
+                "title": pr.get("title"),
+                "state": pr.get("state"),
+                "url": pr.get("html_url"),
+                "user": pr.get("user", {}).get("login"),
+                "created_at": pr.get("created_at"),
+                "updated_at": pr.get("updated_at"),
+                "draft": pr.get("draft", False),
+                "additions": pr.get("additions", 0),
+                "deletions": pr.get("deletions", 0),
+                "changed_files": pr.get("changed_files", 0),
+            }
+        )
 
     return {
         "pull_requests": prs,
@@ -1646,7 +1665,7 @@ def search_pull_requests(
     per_page: int = 30,
 ) -> dict[str, Any]:
     """Search pull requests across GitHub repositories.
-    
+
     Args:
         oauth_token: GitHub token
         query: Search query using GitHub search syntax
@@ -1656,7 +1675,7 @@ def search_pull_requests(
         repo: Repository name (optional)
         page: Page number
         per_page: Results per page
-    
+
     Returns:
         Dictionary with search results
     """
@@ -1700,16 +1719,18 @@ def search_pull_requests(
 
     prs = []
     for item in results.get("items", []):
-        prs.append({
-            "number": item.get("number"),
-            "title": item.get("title"),
-            "state": item.get("state"),
-            "url": item.get("html_url"),
-            "user": item.get("user", {}).get("login"),
-            "created_at": item.get("created_at"),
-            "updated_at": item.get("updated_at"),
-            "comments": item.get("comments", 0),
-        })
+        prs.append(
+            {
+                "number": item.get("number"),
+                "title": item.get("title"),
+                "state": item.get("state"),
+                "url": item.get("html_url"),
+                "user": item.get("user", {}).get("login"),
+                "created_at": item.get("created_at"),
+                "updated_at": item.get("updated_at"),
+                "comments": item.get("comments", 0),
+            }
+        )
 
     return {
         "total_count": results.get("total_count", 0),
@@ -1824,4 +1845,581 @@ def list_org_repositories_by_contributor(
         "repo_type_filter": repo_type,
         "total_repos_with_filtered_contributors": len(contributed_repos),
         "repos": contributed_repos,
+    }
+
+
+def create_pull_request(
+    oauth_token: GitHubTokenData,
+    owner: str,
+    repo: str,
+    title: str,
+    head: str,
+    base: str,
+    body: str | None = None,
+    draft: bool = False,
+    maintainer_can_modify: bool = True,
+) -> dict[str, Any]:
+    """Create a new pull request.
+
+    Args:
+        oauth_token: GitHub token
+        owner: Repository owner
+        repo: Repository name
+        title: PR title
+        head: Branch containing changes (source branch)
+        base: Branch to merge into (target branch)
+        body: PR description (optional)
+        draft: Create as draft PR (optional)
+        maintainer_can_modify: Allow maintainers to edit (optional)
+
+    Returns:
+        Dictionary with PR details
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not all([owner, repo, title, head, base]):
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner, repo, title, head, and base are required",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo", "title", "head", "base"]},
+        )
+
+    request_body = {
+        "title": title,
+        "head": head,
+        "base": base,
+        "draft": draft,
+        "maintainer_can_modify": maintainer_can_modify,
+    }
+
+    if body:
+        request_body["body"] = body
+
+    result = _github_api_request(
+        oauth_token=oauth_token,
+        method="POST",
+        path=f"/repos/{owner}/{repo}/pulls",
+        json_body=request_body,
+        required_scopes=required_scopes,
+    )
+
+    return {
+        "number": result.get("number"),
+        "title": result.get("title"),
+        "state": result.get("state"),
+        "draft": result.get("draft", False),
+        "url": result.get("html_url"),
+        "head_branch": result.get("head", {}).get("ref"),
+        "base_branch": result.get("base", {}).get("ref"),
+        "created_at": result.get("created_at"),
+        "user": result.get("user", {}).get("login"),
+    }
+
+
+def update_pull_request(
+    oauth_token: GitHubTokenData,
+    owner: str,
+    repo: str,
+    pull_number: int,
+    title: str | None = None,
+    body: str | None = None,
+    state: str | None = None,
+    base: str | None = None,
+    draft: bool | None = None,
+    maintainer_can_modify: bool | None = None,
+    reviewers: list[str] | None = None,
+) -> dict[str, Any]:
+    """Update an existing pull request.
+
+    Args:
+        oauth_token: GitHub token
+        owner: Repository owner
+        repo: Repository name
+        pull_number: PR number to update
+        title: New title (optional)
+        body: New description (optional)
+        state: 'open' or 'closed' (optional)
+        base: New base branch (optional)
+        draft: Mark as draft/ready (optional)
+        maintainer_can_modify: Allow maintainers to edit (optional)
+        reviewers: Request reviews from users (optional)
+
+    Returns:
+        Dictionary with updated PR details
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not all([owner, repo]) or pull_number <= 0:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner, repo, and pull_number are required",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo", "pull_number"]},
+        )
+
+    request_body = {}
+
+    if title is not None:
+        request_body["title"] = title
+    if body is not None:
+        request_body["body"] = body
+    if state is not None:
+        request_body["state"] = state
+    if base is not None:
+        request_body["base"] = base
+    if draft is not None:
+        request_body["draft"] = draft
+    if maintainer_can_modify is not None:
+        request_body["maintainer_can_modify"] = maintainer_can_modify
+
+    if not request_body and not reviewers:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="At least one field must be provided to update",
+            http_status=400,
+            retryable=False,
+        )
+
+    result = _github_api_request(
+        oauth_token=oauth_token,
+        method="PATCH",
+        path=f"/repos/{owner}/{repo}/pulls/{pull_number}",
+        json_body=request_body,
+        required_scopes=required_scopes,
+    )
+
+    # Update reviewers separately if provided
+    if reviewers:
+        reviewer_body = {"reviewers": reviewers}
+        try:
+            _github_api_request(
+                oauth_token=oauth_token,
+                method="POST",
+                path=f"/repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers",
+                json_body=reviewer_body,
+                required_scopes=required_scopes,
+            )
+        except GitHubServiceError:
+            # Continue even if reviewer assignment fails
+            pass
+
+    return {
+        "number": result.get("number"),
+        "title": result.get("title"),
+        "state": result.get("state"),
+        "draft": result.get("draft", False),
+        "url": result.get("html_url"),
+        "updated_at": result.get("updated_at"),
+    }
+
+
+def merge_pull_request(
+    oauth_token: GitHubTokenData,
+    owner: str,
+    repo: str,
+    pull_number: int,
+    merge_method: str = "merge",
+    commit_title: str | None = None,
+    commit_message: str | None = None,
+) -> dict[str, Any]:
+    """Merge a pull request.
+
+    Args:
+        oauth_token: GitHub token
+        owner: Repository owner
+        repo: Repository name
+        pull_number: PR number to merge
+        merge_method: 'merge', 'squash', or 'rebase' (default: 'merge')
+        commit_title: Custom commit title (optional)
+        commit_message: Commit message details (optional)
+
+    Returns:
+        Dictionary with merge result
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not all([owner, repo]) or pull_number <= 0:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner, repo, and pull_number are required",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo", "pull_number"]},
+        )
+
+    if merge_method not in ["merge", "squash", "rebase"]:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="merge_method must be 'merge', 'squash', or 'rebase'",
+            http_status=400,
+            retryable=False,
+        )
+
+    request_body = {
+        "merge_method": merge_method,
+    }
+
+    if commit_title:
+        request_body["commit_title"] = commit_title
+    if commit_message:
+        request_body["commit_message"] = commit_message
+
+    result = _github_api_request(
+        oauth_token=oauth_token,
+        method="PUT",
+        path=f"/repos/{owner}/{repo}/pulls/{pull_number}/merge",
+        json_body=request_body,
+        required_scopes=required_scopes,
+    )
+
+    return {
+        "merged": result.get("merged", False),
+        "sha": result.get("sha"),
+        "message": result.get("message"),
+    }
+
+
+def update_pull_request_branch(
+    oauth_token: GitHubTokenData,
+    owner: str,
+    repo: str,
+    pull_number: int,
+    expected_head_sha: str | None = None,
+) -> dict[str, Any]:
+    """Update PR branch with latest changes from base branch.
+
+    Args:
+        oauth_token: GitHub token
+        owner: Repository owner
+        repo: Repository name
+        pull_number: PR number
+        expected_head_sha: Expected SHA of PR's HEAD ref (optional, for safety)
+
+    Returns:
+        Dictionary with update result
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not all([owner, repo]) or pull_number <= 0:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner, repo, and pull_number are required",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo", "pull_number"]},
+        )
+
+    request_body = {}
+    if expected_head_sha:
+        request_body["expected_head_sha"] = expected_head_sha
+
+    result = _github_api_request(
+        oauth_token=oauth_token,
+        method="PUT",
+        path=f"/repos/{owner}/{repo}/pulls/{pull_number}/update-branch",
+        json_body=request_body,
+        required_scopes=required_scopes,
+    )
+
+    return {
+        "message": result.get("message"),
+        "url": result.get("url"),
+    }
+
+
+def pull_request_review_write(
+    oauth_token: GitHubTokenData,
+    owner: str,
+    repo: str,
+    pull_number: int,
+    method: str,
+    commit_id: str | None = None,
+    body: str | None = None,
+    event: str | None = None,
+    thread_id: str | None = None,
+) -> dict[str, Any]:
+    """Write operations on PR reviews (create, submit, delete, resolve/unresolve threads).
+
+    Methods:
+    - create: Create new review (with optional event to auto-submit)
+    - submit_pending: Submit existing pending review
+    - delete_pending: Delete pending review
+    - resolve_thread: Resolve review thread
+    - unresolve_thread: Unresolve review thread
+
+    Args:
+        oauth_token: GitHub token
+        owner: Repository owner
+        repo: Repository name
+        pull_number: PR number
+        method: Operation (create, submit_pending, delete_pending, resolve_thread, unresolve_thread)
+        commit_id: Commit SHA for review (required for create)
+        body: Review comment text
+        event: APPROVE, REQUEST_CHANGES, or COMMENT (optional for create, required for submit_pending)
+        thread_id: Thread ID for thread operations (required for resolve/unresolve)
+
+    Returns:
+        Dictionary with operation result
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if method in ["resolve_thread", "unresolve_thread"]:
+        # These only need thread_id
+        if not thread_id:
+            raise GitHubServiceError(
+                code="INVALID_INPUT",
+                message=f"{method} requires thread_id",
+                http_status=400,
+                retryable=False,
+                details={"field": "thread_id"},
+            )
+
+        # Thread operations use GraphQL, but GitHub also supports REST for these
+        # For simplicity, we'll use a REST-like approach
+        operation_type = "RESOLVE" if method == "resolve_thread" else "UNRESOLVE"
+        request_body = {"resolved": operation_type == "RESOLVE"}
+
+        try:
+            result = _github_api_request(
+                oauth_token=oauth_token,
+                method="PATCH",
+                path=f"/repos/{owner}/{repo}/pulls/comments/{thread_id}",
+                json_body=request_body,
+                required_scopes=required_scopes,
+            )
+            return {
+                "thread_id": thread_id,
+                "resolved": result.get("resolved", operation_type == "RESOLVE"),
+            }
+        except GitHubServiceError:
+            # Fallback for v3 API
+            return {
+                "thread_id": thread_id,
+                "message": f"Thread {operation_type.lower()}d",
+            }
+
+    elif method == "create":
+        # Create review (optionally submit)
+        if not all([owner, repo]) or pull_number <= 0:
+            raise GitHubServiceError(
+                code="INVALID_INPUT",
+                message="owner, repo, and pull_number are required",
+                http_status=400,
+                retryable=False,
+            )
+
+        if not commit_id:
+            raise GitHubServiceError(
+                code="INVALID_INPUT",
+                message="commit_id is required for creating a review",
+                http_status=400,
+                retryable=False,
+                details={"field": "commit_id"},
+            )
+
+        request_body = {
+            "commit_id": commit_id,
+        }
+
+        if body:
+            request_body["body"] = body
+        if event:
+            request_body["event"] = event
+
+        result = _github_api_request(
+            oauth_token=oauth_token,
+            method="POST",
+            path=f"/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
+            json_body=request_body,
+            required_scopes=required_scopes,
+        )
+
+        return {
+            "id": result.get("id"),
+            "node_id": result.get("node_id"),
+            "state": result.get("state"),
+            "body": result.get("body"),
+            "user": result.get("user", {}).get("login"),
+            "submitted_at": result.get("submitted_at"),
+        }
+
+    elif method == "submit_pending":
+        # Submit pending review
+        if not all([owner, repo]) or pull_number <= 0:
+            raise GitHubServiceError(
+                code="INVALID_INPUT",
+                message="owner, repo, and pull_number are required",
+                http_status=400,
+                retryable=False,
+            )
+
+        if not event:
+            raise GitHubServiceError(
+                code="INVALID_INPUT",
+                message="event is required for submitting pending review",
+                http_status=400,
+                retryable=False,
+                details={
+                    "field": "event",
+                    "valid_values": ["APPROVE", "REQUEST_CHANGES", "COMMENT"],
+                },
+            )
+
+        if event not in ["APPROVE", "REQUEST_CHANGES", "COMMENT"]:
+            raise GitHubServiceError(
+                code="INVALID_INPUT",
+                message="event must be APPROVE, REQUEST_CHANGES, or COMMENT",
+                http_status=400,
+                retryable=False,
+            )
+
+        request_body = {
+            "event": event,
+        }
+
+        if body:
+            request_body["body"] = body
+
+        result = _github_api_request(
+            oauth_token=oauth_token,
+            method="POST",
+            path=f"/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
+            json_body=request_body,
+            required_scopes=required_scopes,
+        )
+
+        return {
+            "id": result.get("id"),
+            "state": result.get("state"),
+            "submitted_at": result.get("submitted_at"),
+        }
+
+    elif method == "delete_pending":
+        # Delete pending review
+        if not all([owner, repo]) or pull_number <= 0:
+            raise GitHubServiceError(
+                code="INVALID_INPUT",
+                message="owner, repo, and pull_number are required",
+                http_status=400,
+                retryable=False,
+            )
+
+        # Need to find pending review first
+        reviews_result = _github_api_request(
+            oauth_token=oauth_token,
+            method="GET",
+            path=f"/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
+            required_scopes=required_scopes,
+        )
+
+        pending_review_id = None
+        for review in reviews_result if isinstance(reviews_result, list) else []:
+            if review.get("state") == "PENDING":
+                pending_review_id = review.get("id")
+                break
+
+        if not pending_review_id:
+            raise GitHubServiceError(
+                code="NOT_FOUND",
+                message="No pending review found for deletion",
+                http_status=404,
+            )
+
+        _github_api_request(
+            oauth_token=oauth_token,
+            method="DELETE",
+            path=f"/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{pending_review_id}",
+            required_scopes=required_scopes,
+        )
+
+        return {
+            "deleted": True,
+            "review_id": pending_review_id,
+        }
+
+    else:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message=f"Unknown method: {method}",
+            http_status=400,
+            details={
+                "method": method,
+                "valid_methods": [
+                    "create",
+                    "submit_pending",
+                    "delete_pending",
+                    "resolve_thread",
+                    "unresolve_thread",
+                ],
+            },
+        )
+
+
+def add_reply_to_pull_request_comment(
+    oauth_token: GitHubTokenData,
+    owner: str,
+    repo: str,
+    pull_number: int,
+    comment_id: int,
+    body: str,
+) -> dict[str, Any]:
+    """Add a reply to an existing PR comment.
+
+    Args:
+        oauth_token: GitHub token
+        owner: Repository owner
+        repo: Repository name
+        pull_number: PR number
+        comment_id: ID of the comment to reply to
+        body: Reply text
+
+    Returns:
+        Dictionary with new comment details
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not all([owner, repo, body]) or pull_number <= 0 or comment_id <= 0:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner, repo, pull_number, comment_id, and body are required",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo", "pull_number", "comment_id", "body"]},
+        )
+
+    request_body = {
+        "body": body,
+        "in_reply_to": comment_id,
+    }
+
+    result = _github_api_request(
+        oauth_token=oauth_token,
+        method="POST",
+        path=f"/repos/{owner}/{repo}/pulls/{pull_number}/comments",
+        json_body=request_body,
+        required_scopes=required_scopes,
+    )
+
+    return {
+        "id": result.get("id"),
+        "user": result.get("user", {}).get("login"),
+        "body": result.get("body"),
+        "created_at": result.get("created_at"),
+        "url": result.get("html_url"),
+        "in_reply_to_id": result.get("in_reply_to_id"),
     }

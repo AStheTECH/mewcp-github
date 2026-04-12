@@ -10,9 +10,11 @@ from .schemas import GitHubTokenData
 from .service import (
     GitHubServiceError,
     add_issue_comment,
+    add_reply_to_pull_request_comment,
     create_branch,
     create_issue,
     create_or_update_file,
+    create_pull_request,
     create_repository,
     fork_repository,
     get_file_contents,
@@ -27,7 +29,9 @@ from .service import (
     list_org_repositories_by_contributor,
     list_pull_requests,
     list_tags,
+    merge_pull_request,
     pull_request_read,
+    pull_request_review_write,
     push_files,
     search_repositories,
     search_code,
@@ -35,6 +39,8 @@ from .service import (
     search_users,
     search_issues,
     update_issue,
+    update_pull_request,
+    update_pull_request_branch,
 )
 
 logger = logging.getLogger("github-mcp-server")
@@ -1925,6 +1931,480 @@ def register_tools(mcp: FastMCP) -> None:
                     "search_pull_requests",
                     code="INTERNAL_ERROR",
                     message="Unexpected error while searching pull requests.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="create_pull_request",
+        description="Create a new pull request in a GitHub repository.",
+    )
+    def create_pr(
+        oauth_token: GitHubTokenData = Field(
+            ..., description="GitHub token with token and optional scopes"
+        ),
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        title: str = Field(..., description="Pull request title"),
+        head: str = Field(..., description="Branch containing changes"),
+        base: str = Field(..., description="Branch to merge into"),
+        body: str | None = Field(
+            None, description="Pull request description (optional)"
+        ),
+        draft: bool = Field(False, description="Create as draft pull request"),
+        maintainer_can_modify: bool = Field(True, description="Allow maintainer edits"),
+    ) -> str:
+        try:
+            result = create_pull_request(
+                oauth_token,
+                owner=owner,
+                repo=repo,
+                title=title,
+                head=head,
+                base=base,
+                body=body,
+                draft=draft,
+                maintainer_can_modify=maintainer_can_modify,
+            )
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "create_pull_request",
+                    result,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["create_pull_request"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed create_pull_request for %s/%s: %s", owner, repo, exc.message
+            )
+            return json.dumps(
+                error_response(
+                    "create_pull_request",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error("Failed create_pull_request for %s/%s: %s", owner, repo, exc)
+            return json.dumps(
+                error_response(
+                    "create_pull_request",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while creating pull request.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="update_pull_request",
+        description="Update an existing pull request in a GitHub repository.",
+    )
+    def update_pr(
+        oauth_token: GitHubTokenData = Field(
+            ..., description="GitHub token with token and optional scopes"
+        ),
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        pull_number: int = Field(..., description="Pull request number"),
+        title: str | None = Field(None, description="New title (optional)"),
+        body: str | None = Field(None, description="New description (optional)"),
+        state: str | None = Field(None, description="'open' or 'closed' (optional)"),
+        base: str | None = Field(None, description="New base branch (optional)"),
+        draft: bool | None = Field(None, description="Mark as draft/ready (optional)"),
+        maintainer_can_modify: bool | None = Field(
+            None, description="Allow maintainer edits (optional)"
+        ),
+        reviewers: list[str] | None = Field(
+            None, description="Request reviews from users (optional)"
+        ),
+    ) -> str:
+        try:
+            result = update_pull_request(
+                oauth_token,
+                owner=owner,
+                repo=repo,
+                pull_number=pull_number,
+                title=title,
+                body=body,
+                state=state,
+                base=base,
+                draft=draft,
+                maintainer_can_modify=maintainer_can_modify,
+                reviewers=reviewers,
+            )
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "update_pull_request",
+                    result,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["update_pull_request"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed update_pull_request for %s/%s#%d: %s",
+                owner,
+                repo,
+                pull_number,
+                exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "update_pull_request",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed update_pull_request for %s/%s#%d: %s",
+                owner,
+                repo,
+                pull_number,
+                exc,
+            )
+            return json.dumps(
+                error_response(
+                    "update_pull_request",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while updating pull request.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="merge_pull_request",
+        description="Merge a pull request in a GitHub repository.",
+    )
+    def merge_pr(
+        oauth_token: GitHubTokenData = Field(
+            ..., description="GitHub token with token and optional scopes"
+        ),
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        pull_number: int = Field(..., description="Pull request number"),
+        merge_method: str = Field(
+            "merge", description="'merge', 'squash', or 'rebase'"
+        ),
+        commit_title: str | None = Field(
+            None, description="Custom commit title (optional)"
+        ),
+        commit_message: str | None = Field(
+            None, description="Commit message details (optional)"
+        ),
+    ) -> str:
+        try:
+            result = merge_pull_request(
+                oauth_token,
+                owner=owner,
+                repo=repo,
+                pull_number=pull_number,
+                merge_method=merge_method,
+                commit_title=commit_title,
+                commit_message=commit_message,
+            )
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "merge_pull_request",
+                    result,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["merge_pull_request"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed merge_pull_request for %s/%s#%d: %s",
+                owner,
+                repo,
+                pull_number,
+                exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "merge_pull_request",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed merge_pull_request for %s/%s#%d: %s",
+                owner,
+                repo,
+                pull_number,
+                exc,
+            )
+            return json.dumps(
+                error_response(
+                    "merge_pull_request",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while merging pull request.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="update_pull_request_branch",
+        description="Update pull request branch with latest changes from base branch.",
+    )
+    def update_pr_branch(
+        oauth_token: GitHubTokenData = Field(
+            ..., description="GitHub token with token and optional scopes"
+        ),
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        pull_number: int = Field(..., description="Pull request number"),
+        expected_head_sha: str | None = Field(
+            None, description="Expected HEAD SHA (optional)"
+        ),
+    ) -> str:
+        try:
+            result = update_pull_request_branch(
+                oauth_token,
+                owner=owner,
+                repo=repo,
+                pull_number=pull_number,
+                expected_head_sha=expected_head_sha,
+            )
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "update_pull_request_branch",
+                    result,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES[
+                                "update_pull_request_branch"
+                            ],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed update_pull_request_branch for %s/%s#%d: %s",
+                owner,
+                repo,
+                pull_number,
+                exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "update_pull_request_branch",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed update_pull_request_branch for %s/%s#%d: %s",
+                owner,
+                repo,
+                pull_number,
+                exc,
+            )
+            return json.dumps(
+                error_response(
+                    "update_pull_request_branch",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while updating pull request branch.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="pull_request_review_write",
+        description="Write operations on PR reviews (create, submit, delete, resolve/unresolve threads).",
+    )
+    def pr_review_write(
+        oauth_token: GitHubTokenData = Field(
+            ..., description="GitHub token with token and optional scopes"
+        ),
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        pull_number: int = Field(..., description="Pull request number"),
+        method: str = Field(
+            ...,
+            description="create, submit_pending, delete_pending, resolve_thread, or unresolve_thread",
+        ),
+        commit_id: str | None = Field(
+            None, description="Commit SHA (required for create)"
+        ),
+        body: str | None = Field(None, description="Review comment text (optional)"),
+        event: str | None = Field(
+            None,
+            description="APPROVE, REQUEST_CHANGES, or COMMENT (optional for create, required for submit_pending)",
+        ),
+        thread_id: str | None = Field(
+            None, description="Thread ID for thread operations"
+        ),
+    ) -> str:
+        try:
+            result = pull_request_review_write(
+                oauth_token,
+                owner=owner,
+                repo=repo,
+                pull_number=pull_number,
+                method=method,
+                commit_id=commit_id,
+                body=body,
+                event=event,
+                thread_id=thread_id,
+            )
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "pull_request_review_write",
+                    result,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES[
+                                "pull_request_review_write"
+                            ],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed pull_request_review_write for %s/%s#%d: %s",
+                owner,
+                repo,
+                pull_number,
+                exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "pull_request_review_write",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed pull_request_review_write for %s/%s#%d: %s",
+                owner,
+                repo,
+                pull_number,
+                exc,
+            )
+            return json.dumps(
+                error_response(
+                    "pull_request_review_write",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while writing pull request review.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="add_reply_to_pull_request_comment",
+        description="Add a reply to an existing pull request comment.",
+    )
+    def add_pr_comment_reply(
+        oauth_token: GitHubTokenData = Field(
+            ..., description="GitHub token with token and optional scopes"
+        ),
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        pull_number: int = Field(..., description="Pull request number"),
+        comment_id: int = Field(..., description="ID of the comment to reply to"),
+        body: str = Field(..., description="Reply text"),
+    ) -> str:
+        try:
+            result = add_reply_to_pull_request_comment(
+                oauth_token,
+                owner=owner,
+                repo=repo,
+                pull_number=pull_number,
+                comment_id=comment_id,
+                body=body,
+            )
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "add_reply_to_pull_request_comment",
+                    result,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES[
+                                "add_reply_to_pull_request_comment"
+                            ],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed add_reply_to_pull_request_comment for %s/%s#%d: %s",
+                owner,
+                repo,
+                pull_number,
+                exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "add_reply_to_pull_request_comment",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed add_reply_to_pull_request_comment for %s/%s#%d: %s",
+                owner,
+                repo,
+                pull_number,
+                exc,
+            )
+            return json.dumps(
+                error_response(
+                    "add_reply_to_pull_request_comment",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while adding pull request comment reply.",
                     details={"exception": str(exc)},
                 )
             )
