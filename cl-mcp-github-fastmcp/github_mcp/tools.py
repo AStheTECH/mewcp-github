@@ -9,6 +9,8 @@ from .response import error_response, success_response
 from .schemas import GitHubTokenData
 from .service import (
     GitHubServiceError,
+    add_issue_comment,
+    create_issue,
     get_file_contents,
     get_commit,
     get_issue,
@@ -22,6 +24,7 @@ from .service import (
     search_code,
     search_users,
     search_issues,
+    update_issue,
 )
 
 logger = logging.getLogger("github-mcp-server")
@@ -43,14 +46,14 @@ def register_tools(mcp: FastMCP) -> None:
     )
     def get_repo(
         oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token input with token and optional scopes"
+            ..., description="GitHub token with token and optional scopes"
         ),
         owner: str = Field(..., description="Repository owner, for example octocat"),
         repo: str = Field(..., description="Repository name"),
     ) -> str:
         try:
             result = get_repo_service(oauth_token, owner, repo)
-            granted_scopes = oauth_token.get("scopes", [])
+            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "get_repo",
@@ -102,7 +105,7 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             data = list_branches(oauth_token, owner, repo, page=page, per_page=perPage)
-            granted_scopes = oauth_token.get("scopes", [])
+            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "list_branches",
@@ -161,7 +164,7 @@ def register_tools(mcp: FastMCP) -> None:
             data = search_repositories(
                 oauth_token, query, sort=sort, order=order, page=page, per_page=perPage
             )
-            granted_scopes = oauth_token.get("scopes", [])
+            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "search_repositories",
@@ -229,7 +232,7 @@ def register_tools(mcp: FastMCP) -> None:
                 page=page,
                 per_page=perPage,
             )
-            granted_scopes = oauth_token.get("scopes", [])
+            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "list_commits",
@@ -281,7 +284,7 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             data = get_commit(oauth_token, owner, repo, sha, include_diff=include_diff)
-            granted_scopes = oauth_token.get("scopes", [])
+            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "get_commit",
@@ -347,7 +350,7 @@ def register_tools(mcp: FastMCP) -> None:
                 page=page,
                 per_page=perPage,
             )
-            granted_scopes = oauth_token.get("scopes", [])
+            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "list_issues",
@@ -399,7 +402,7 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             data = get_file_contents(oauth_token, owner, repo, path=path, ref=ref)
-            granted_scopes = oauth_token.get("scopes", [])
+            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "get_file_contents",
@@ -478,7 +481,7 @@ def register_tools(mcp: FastMCP) -> None:
             data = search_code(
                 oauth_token, query, sort=sort, order=order, page=page, per_page=perPage
             )
-            granted_scopes = oauth_token.get("scopes", [])
+            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "search_code",
@@ -553,7 +556,7 @@ def register_tools(mcp: FastMCP) -> None:
             data = search_users(
                 oauth_token, query, sort=sort, order=order, page=page, per_page=perPage
             )
-            granted_scopes = oauth_token.get("scopes", [])
+            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "search_users",
@@ -643,7 +646,7 @@ def register_tools(mcp: FastMCP) -> None:
                 page=page,
                 per_page=perPage,
             )
-            granted_scopes = oauth_token.get("scopes", [])
+            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "search_issues",
@@ -706,7 +709,7 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             data = get_issue(oauth_token, owner, repo, issue_number)
-            granted_scopes = oauth_token.get("scopes", [])
+            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "get_issue",
@@ -783,7 +786,7 @@ def register_tools(mcp: FastMCP) -> None:
             data = get_issue_comments(
                 oauth_token, owner, repo, issue_number, page=page, per_page=perPage
             )
-            granted_scopes = oauth_token.get("scopes", [])
+            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "get_issue_comments",
@@ -837,6 +840,274 @@ def register_tools(mcp: FastMCP) -> None:
             )
 
     @mcp.tool(
+        name="create_issue",
+        description="Create a new GitHub issue in a repository. Returns the issue ID, number, and URL on successful creation.",
+    )
+    def create_issue_tool(
+        oauth_token: GitHubTokenData = Field(
+            ...,
+            description="GitHub personal access token or OAuth token (with repo scope)",
+        ),
+        owner: str = Field(
+            ..., description="Repository owner name. Example: 'github'."
+        ),
+        repo: str = Field(
+            ..., description="Repository name. Example: 'github-mcp-server'."
+        ),
+        title: str = Field(
+            ...,
+            description="Issue title (required). Visible on the issue page. Example: 'Fix authentication bug'.",
+        ),
+        body: str | None = Field(
+            None,
+            description="Issue description (optional). Supports GitHub markdown formatting. Can include code blocks, lists, links, etc.",
+        ),
+        assignees: list[str] | None = Field(
+            None,
+            description="List of GitHub usernames to assign to this issue (optional). Example: ['user1', 'user2']. Users must have repository access.",
+        ),
+        labels: list[str] | None = Field(
+            None,
+            description="List of label names to add to this issue (optional). Example: ['bug', 'urgent']. Labels must exist in the repository.",
+        ),
+        milestone: int | None = Field(
+            None,
+            description="Milestone ID to associate with this issue (optional). Must be a valid milestone in the repository.",
+        ),
+    ) -> str:
+        try:
+            data = create_issue(
+                oauth_token,
+                owner,
+                repo,
+                title,
+                body=body,
+                assignees=assignees,
+                labels=labels,
+                milestone=milestone,
+            )
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "create_issue",
+                    data,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["create_issue"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error("Failed create_issue for %s/%s: %s", owner, repo, exc.message)
+            return json.dumps(
+                error_response(
+                    "create_issue",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error("Failed create_issue for %s/%s: %s", owner, repo, exc)
+            return json.dumps(
+                error_response(
+                    "create_issue",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while creating issue.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="add_issue_comment",
+        description="Add a comment to a GitHub issue or pull request. Comments support GitHub markdown formatting.",
+    )
+    def add_issue_comment_tool(
+        oauth_token: GitHubTokenData = Field(
+            ...,
+            description="GitHub personal access token or OAuth token (with repo scope)",
+        ),
+        owner: str = Field(
+            ..., description="Repository owner name. Example: 'github'."
+        ),
+        repo: str = Field(
+            ..., description="Repository name. Example: 'github-mcp-server'."
+        ),
+        issue_number: int = Field(
+            ..., description="Issue or pull request number. Example: 123."
+        ),
+        body: str = Field(
+            ...,
+            description="Comment text (required). Supports GitHub markdown formatting including code blocks, mentions (@username), and reactions.",
+        ),
+    ) -> str:
+        try:
+            data = add_issue_comment(oauth_token, owner, repo, issue_number, body)
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "add_issue_comment",
+                    data,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["add_issue_comment"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed add_issue_comment for %s/%s#%d: %s",
+                owner,
+                repo,
+                issue_number,
+                exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "add_issue_comment",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed add_issue_comment for %s/%s#%d: %s",
+                owner,
+                repo,
+                issue_number,
+                exc,
+            )
+            return json.dumps(
+                error_response(
+                    "add_issue_comment",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while adding comment.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="update_issue",
+        description="Update GitHub issue properties including title, body, state (open/closed), assignees, and labels. Provide only fields you want to change.",
+    )
+    def update_issue_tool(
+        oauth_token: GitHubTokenData = Field(
+            ...,
+            description="GitHub personal access token or OAuth token (with repo scope)",
+        ),
+        owner: str = Field(
+            ..., description="Repository owner name. Example: 'github'."
+        ),
+        repo: str = Field(
+            ..., description="Repository name. Example: 'github-mcp-server'."
+        ),
+        issue_number: int = Field(
+            ..., description="Issue number to update. Example: 123."
+        ),
+        title: str | None = Field(
+            None,
+            description="New issue title (optional). Leave empty to keep current title.",
+        ),
+        body: str | None = Field(
+            None,
+            description="New issue description (optional). Supports GitHub markdown. Leave empty to keep current body.",
+        ),
+        state: str | None = Field(
+            None,
+            description="New state for the issue (optional). Options: 'open' or 'closed'. Leave empty to keep current state.",
+        ),
+        state_reason: str | None = Field(
+            None,
+            description="Reason for state change when closing (optional). Options: 'completed', 'not_planned'. Only used when state='closed'.",
+        ),
+        assignees: list[str] | None = Field(
+            None,
+            description="New list of assignees (optional). Replaces current assignees. Pass empty list to clear assignments.",
+        ),
+        labels: list[str] | None = Field(
+            None,
+            description="New list of labels (optional). Replaces current labels. Pass empty list to clear labels.",
+        ),
+        milestone: int | None = Field(
+            None,
+            description="Milestone ID (optional). Pass 0 or null to remove milestone.",
+        ),
+    ) -> str:
+        try:
+            data = update_issue(
+                oauth_token,
+                owner,
+                repo,
+                issue_number,
+                title=title,
+                body=body,
+                state=state,
+                state_reason=state_reason,
+                assignees=assignees,
+                labels=labels,
+                milestone=milestone,
+            )
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "update_issue",
+                    data,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["update_issue"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed update_issue for %s/%s#%d: %s",
+                owner,
+                repo,
+                issue_number,
+                exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "update_issue",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed update_issue for %s/%s#%d: %s",
+                owner,
+                repo,
+                issue_number,
+                exc,
+            )
+            return json.dumps(
+                error_response(
+                    "update_issue",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while updating issue.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
         name="list_org_repositories_by_contributor",
         description="Find all repositories in an organization where specific contributors have made contributions.",
     )
@@ -863,7 +1134,7 @@ def register_tools(mcp: FastMCP) -> None:
             data = list_org_repositories_by_contributor(
                 oauth_token, org, usernames_list, repo_type=repo_type
             )
-            granted_scopes = oauth_token.get("scopes", [])
+            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "list_org_repositories_by_contributor",

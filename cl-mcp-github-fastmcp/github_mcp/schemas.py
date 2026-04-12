@@ -1,6 +1,9 @@
-from typing_extensions import TypedDict
+from pydantic import BaseModel, Field
 
 
-class GitHubTokenData(TypedDict, total=False):
-    token: str
-    scopes: list[str]
+class GitHubTokenData(BaseModel):
+    token: str = Field(..., description="The GitHub access token.")
+    scopes: list[str] = Field(
+        default=[],
+        description="The scopes granted to the token. Example: ['repo', 'read:org'], etc.",
+    )

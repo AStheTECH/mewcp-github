@@ -15,6 +15,9 @@ TOOL_REQUIRED_SCOPES = {
     "list_issues": ["repo"],
     "get_issue": ["repo"],
     "get_issue_comments": ["repo"],
+    "create_issue": ["repo"],
+    "add_issue_comment": ["repo"],
+    "update_issue": ["repo"],
     "get_file_contents": ["repo"],
     "list_org_repositories_by_contributor": ["repo"],
 }

@@ -34,8 +34,8 @@ def get_token_data(oauth_token: GitHubTokenData | str) -> dict[str, Any]:
         }
 
     return {
-        "token": oauth_token.get("token"),
-        "scopes": oauth_token.get("scopes") or [],
+        "token": oauth_token.token,
+        "scopes": oauth_token.scopes or [],
     }
 
 
@@ -509,7 +509,6 @@ def search_code(
         },
     )
 
-    # Minimal response shape
     return {
         "total_count": results.get("total_count", 0),
         "incomplete_results": results.get("incomplete_results", False),
@@ -579,7 +578,6 @@ def search_users(
         },
     )
 
-    # Minimal response shape
     return {
         "total_count": results.get("total_count", 0),
         "incomplete_results": results.get("incomplete_results", False),
@@ -659,7 +657,6 @@ def search_issues(
         },
     )
 
-    # Minimal response shape
     return {
         "total_count": results.get("total_count", 0),
         "incomplete_results": results.get("incomplete_results", False),
@@ -715,7 +712,6 @@ def get_issue(
         params={},
     )
 
-    # Minimal response shape
     return {
         "number": result.get("number"),
         "title": result.get("title"),
@@ -778,7 +774,6 @@ def get_issue_comments(
         },
     )
 
-    # Minimal response shape
     return {
         "comments": [
             {
@@ -793,6 +788,208 @@ def get_issue_comments(
         ],
         "page": page,
         "per_page": per_page,
+    }
+
+
+def create_issue(
+    oauth_token: GitHubTokenData | str,
+    owner: str,
+    repo: str,
+    title: str,
+    body: str | None = None,
+    assignees: list[str] | None = None,
+    labels: list[str] | None = None,
+    milestone: int | None = None,
+) -> dict[str, Any]:
+    """Create a new issue in a GitHub repository.
+
+    Args:
+        oauth_token: GitHub personal access token or OAuth token
+        owner: Repository owner
+        repo: Repository name
+        title: Issue title (required)
+        body: Issue description (optional)
+        assignees: List of usernames to assign (optional)
+        labels: List of label names (optional)
+        milestone: Milestone ID (optional)
+
+    Returns:
+        Dictionary with issue ID and URL
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not owner or not repo or not title:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner, repo, and title are required",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo", "title"]},
+        )
+
+    request_body = {
+        "title": title,
+    }
+    if body:
+        request_body["body"] = body
+    if assignees:
+        request_body["assignees"] = assignees
+    if labels:
+        request_body["labels"] = labels
+    if milestone is not None:
+        request_body["milestone"] = milestone
+
+    result = _github_api_request(
+        oauth_token=token_data["token"],
+        method="POST",
+        path=f"/repos/{owner}/{repo}/issues",
+        json_body=request_body,
+    )
+
+    # Minimal response
+    return {
+        "id": result.get("id"),
+        "number": result.get("number"),
+        "url": result.get("html_url"),
+        "title": result.get("title"),
+    }
+
+
+def add_issue_comment(
+    oauth_token: GitHubTokenData | str,
+    owner: str,
+    repo: str,
+    issue_number: int,
+    body: str,
+) -> dict[str, Any]:
+    """Add a comment to a GitHub issue or pull request.
+
+    Args:
+        oauth_token: GitHub personal access token or OAuth token
+        owner: Repository owner
+        repo: Repository name
+        issue_number: Issue or PR number
+        body: Comment text (required)
+
+    Returns:
+        Dictionary with comment ID and URL
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not owner or not repo or issue_number <= 0 or not body:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner, repo, issue_number, and body are required",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo", "issue_number", "body"]},
+        )
+
+    request_body = {"body": body}
+
+    result = _github_api_request(
+        oauth_token=token_data["token"],
+        method="POST",
+        path=f"/repos/{owner}/{repo}/issues/{issue_number}/comments",
+        json_body=request_body,
+    )
+
+    # Minimal response
+    return {
+        "id": result.get("id"),
+        "url": result.get("html_url"),
+        "body": result.get("body"),
+        "user": result.get("user", {}).get("login"),
+    }
+
+
+def update_issue(
+    oauth_token: GitHubTokenData | str,
+    owner: str,
+    repo: str,
+    issue_number: int,
+    title: str | None = None,
+    body: str | None = None,
+    state: str | None = None,
+    state_reason: str | None = None,
+    assignees: list[str] | None = None,
+    labels: list[str] | None = None,
+    milestone: int | None = None,
+) -> dict[str, Any]:
+    """Update a GitHub issue.
+
+    Args:
+        oauth_token: GitHub personal access token or OAuth token
+        owner: Repository owner
+        repo: Repository name
+        issue_number: Issue number (required)
+        title: New issue title (optional)
+        body: New issue body (optional)
+        state: 'open' or 'closed' (optional)
+        state_reason: 'completed', 'not_planned', or 'duplicate' when closing (optional)
+        assignees: List of usernames to assign (optional)
+        labels: List of label names (optional)
+        milestone: Milestone ID (optional)
+
+    Returns:
+        Dictionary with issue ID and URL
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not owner or not repo or issue_number <= 0:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner, repo, and issue_number are required",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo", "issue_number"]},
+        )
+
+    # Build request body only with provided fields
+    request_body = {}
+    if title is not None:
+        request_body["title"] = title
+    if body is not None:
+        request_body["body"] = body
+    if state is not None:
+        request_body["state"] = state
+    if state_reason is not None:
+        request_body["state_reason"] = state_reason
+    if assignees is not None:
+        request_body["assignees"] = assignees
+    if labels is not None:
+        request_body["labels"] = labels
+    if milestone is not None:
+        request_body["milestone"] = milestone
+
+    if not request_body:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="At least one field (title, body, state, assignees, labels, or milestone) must be provided",
+            http_status=400,
+            retryable=False,
+        )
+
+    result = _github_api_request(
+        oauth_token=token_data["token"],
+        method="PATCH",
+        path=f"/repos/{owner}/{repo}/issues/{issue_number}",
+        json_body=request_body,
+    )
+
+    # Minimal response
+    return {
+        "id": result.get("id"),
+        "number": result.get("number"),
+        "url": result.get("html_url"),
+        "title": result.get("title"),
+        "state": result.get("state"),
     }
 
 
