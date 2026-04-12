@@ -13,6 +13,7 @@ from .service import (
     add_reply_to_pull_request_comment,
     assign_copilot_to_issue,
     create_branch,
+    request_copilot_review,
     create_issue,
     create_or_update_file,
     create_pull_request,
@@ -54,14 +55,6 @@ logger = logging.getLogger("github-mcp-server")
 
 
 def register_tools(mcp: FastMCP) -> None:
-    @mcp.tool(
-        name="ping",
-        description="Basic health check for CL GitHub MCP server.",
-    )
-    def ping() -> str:
-        return json.dumps(
-            success_response("ping", {"status": "ok", "server": "CL GitHub MCP Server"})
-        )
 
     @mcp.tool(
         name="get_repo",
@@ -2818,6 +2811,66 @@ def register_tools(mcp: FastMCP) -> None:
                     "assign_copilot_to_issue",
                     code="INTERNAL_ERROR",
                     message="Unexpected error while assigning Copilot to issue.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="request_copilot_review",
+        description="Request a code review from GitHub Copilot on a pull request.",
+    )
+    def request_copilot_review_tool(
+        oauth_token: GitHubTokenData = Field(..., description="GitHub token"),
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        pull_number: int = Field(..., description="Pull request number"),
+    ) -> str:
+        try:
+            result = request_copilot_review(oauth_token, owner, repo, pull_number)
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "request_copilot_review",
+                    result,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["request_copilot_review"],
+                            "granted": granted_scopes,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed request_copilot_review for %s/%s#%d: %s",
+                owner,
+                repo,
+                pull_number,
+                exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "request_copilot_review",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed request_copilot_review for %s/%s#%d: %s",
+                owner,
+                repo,
+                pull_number,
+                exc,
+            )
+            return json.dumps(
+                error_response(
+                    "request_copilot_review",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while requesting Copilot review.",
                     details={"exception": str(exc)},
                 )
             )

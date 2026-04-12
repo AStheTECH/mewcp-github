@@ -150,6 +150,9 @@ def _github_api_request(
     return response.json()
 
 
+#################### Service Methods ####################
+
+
 def get_repo(oauth_token: GitHubTokenData, owner: str, repo: str) -> dict[str, Any]:
     """Get detailed repository information (get_repository enhanced version)."""
     payload = _github_api_request(
@@ -2847,6 +2850,73 @@ def assign_copilot_to_issue(
             raise GitHubServiceError(
                 code="NOT_AVAILABLE",
                 message="Copilot API requires GitHub Enterprise with Copilot access",
+                http_status=403,
+                details={"requires": "GitHub Enterprise + Copilot subscription"},
+            )
+        raise
+
+
+def request_copilot_review(
+    oauth_token: GitHubTokenData,
+    owner: str,
+    repo: str,
+    pull_number: int,
+) -> dict[str, Any]:
+    """Request a code review from GitHub Copilot on a pull request.
+
+    Args:
+        oauth_token: GitHub token
+        owner: Repository owner
+        repo: Repository name
+        pull_number: Pull request number
+
+    Returns:
+        Dictionary with review request status
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not all([owner, repo]) or pull_number <= 0:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner, repo, and pull_number are required",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo", "pull_number"]},
+        )
+
+    request_body = {
+        "reviewers": ["copilot-pull-request-reviewer[bot]"],
+    }
+
+    try:
+        result = _github_api_request(
+            oauth_token=oauth_token,
+            method="POST",
+            path=f"/repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers",
+            json_body=request_body,
+            required_scopes=required_scopes,
+        )
+
+        return {
+            "pull_number": pull_number,
+            "requested": True,
+            "reviewer": "copilot-pull-request-reviewer[bot]",
+            "status": "review_requested",
+        }
+    except GitHubServiceError as e:
+        if e.http_status and 404 in str(e.http_status):
+            raise GitHubServiceError(
+                code="NOT_FOUND",
+                message="Pull request not found",
+                http_status=404,
+                details={"pull_number": pull_number},
+            )
+        elif e.http_status and 403 in str(e.http_status):
+            raise GitHubServiceError(
+                code="NOT_AVAILABLE",
+                message="Copilot reviews require GitHub Enterprise with Copilot access",
                 http_status=403,
                 details={"requires": "GitHub Enterprise + Copilot subscription"},
             )
