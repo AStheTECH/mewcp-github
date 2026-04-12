@@ -11,6 +11,7 @@ from .service import (
     GitHubServiceError,
     add_issue_comment,
     add_reply_to_pull_request_comment,
+    assign_copilot_to_issue,
     create_branch,
     create_issue,
     create_or_update_file,
@@ -21,6 +22,10 @@ from .service import (
     get_commit,
     get_issue,
     get_issue_comments,
+    get_label,
+    get_latest_release,
+    get_me,
+    get_release_by_tag,
     get_repo as get_repo_service,
     get_tag,
     list_branches,
@@ -28,6 +33,7 @@ from .service import (
     list_issues,
     list_org_repositories_by_contributor,
     list_pull_requests,
+    list_releases,
     list_tags,
     merge_pull_request,
     pull_request_read,
@@ -38,6 +44,7 @@ from .service import (
     search_pull_requests,
     search_users,
     search_issues,
+    sub_issue_write,
     update_issue,
     update_pull_request,
     update_pull_request_branch,
@@ -2405,6 +2412,412 @@ def register_tools(mcp: FastMCP) -> None:
                     "add_reply_to_pull_request_comment",
                     code="INTERNAL_ERROR",
                     message="Unexpected error while adding pull request comment reply.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="get_latest_release",
+        description="Get the latest release of a GitHub repository.",
+    )
+    def get_latest_release_tool(
+        oauth_token: GitHubTokenData = Field(..., description="GitHub token"),
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+    ) -> str:
+        try:
+            result = get_latest_release(oauth_token, owner, repo)
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "get_latest_release",
+                    result,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["get_latest_release"],
+                            "granted": granted_scopes,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed get_latest_release for %s/%s: %s", owner, repo, exc.message
+            )
+            return json.dumps(
+                error_response(
+                    "get_latest_release",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error("Failed get_latest_release for %s/%s: %s", owner, repo, exc)
+            return json.dumps(
+                error_response(
+                    "get_latest_release",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while fetching latest release.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="list_releases",
+        description="List releases in a GitHub repository.",
+    )
+    def list_releases_tool(
+        oauth_token: GitHubTokenData = Field(..., description="GitHub token"),
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        page: int = Field(1, description="Page number for pagination"),
+        per_page: int = Field(30, description="Results per page"),
+    ) -> str:
+        try:
+            result = list_releases(oauth_token, owner, repo, page, per_page)
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "list_releases",
+                    result,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["list_releases"],
+                            "granted": granted_scopes,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error("Failed list_releases for %s/%s: %s", owner, repo, exc.message)
+            return json.dumps(
+                error_response(
+                    "list_releases",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error("Failed list_releases for %s/%s: %s", owner, repo, exc)
+            return json.dumps(
+                error_response(
+                    "list_releases",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while listing releases.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="get_release_by_tag",
+        description="Get a specific release by tag name.",
+    )
+    def get_release_by_tag_tool(
+        oauth_token: GitHubTokenData = Field(..., description="GitHub token"),
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        tag: str = Field(..., description="Tag name"),
+    ) -> str:
+        try:
+            result = get_release_by_tag(oauth_token, owner, repo, tag)
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "get_release_by_tag",
+                    result,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["get_release_by_tag"],
+                            "granted": granted_scopes,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed get_release_by_tag for %s/%s tag %s: %s",
+                owner,
+                repo,
+                tag,
+                exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "get_release_by_tag",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed get_release_by_tag for %s/%s tag %s: %s", owner, repo, tag, exc
+            )
+            return json.dumps(
+                error_response(
+                    "get_release_by_tag",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while fetching release by tag.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="get_label",
+        description="Get a specific label from a repository.",
+    )
+    def get_label_tool(
+        oauth_token: GitHubTokenData = Field(..., description="GitHub token"),
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        name: str = Field(..., description="Label name"),
+    ) -> str:
+        try:
+            result = get_label(oauth_token, owner, repo, name)
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "get_label",
+                    result,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["get_label"],
+                            "granted": granted_scopes,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed get_label for %s/%s label %s: %s",
+                owner,
+                repo,
+                name,
+                exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "get_label",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed get_label for %s/%s label %s: %s", owner, repo, name, exc
+            )
+            return json.dumps(
+                error_response(
+                    "get_label",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while fetching label.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="get_me",
+        description="Get details of the authenticated GitHub user.",
+    )
+    def get_me_tool(
+        oauth_token: GitHubTokenData = Field(..., description="GitHub token"),
+    ) -> str:
+        try:
+            result = get_me(oauth_token)
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "get_me",
+                    result,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["get_me"],
+                            "granted": granted_scopes,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error("Failed get_me: %s", exc.message)
+            return json.dumps(
+                error_response(
+                    "get_me",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error("Failed get_me: %s", exc)
+            return json.dumps(
+                error_response(
+                    "get_me",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while fetching user details.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="sub_issue_write",
+        description="Manage sub-issues for a parent issue (add, remove, reprioritize).",
+    )
+    def sub_issue_write_tool(
+        oauth_token: GitHubTokenData = Field(..., description="GitHub token"),
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        issue_number: int = Field(..., description="Parent issue number"),
+        method: str = Field(
+            ..., description="Method: 'add', 'remove', or 'reprioritize'"
+        ),
+        sub_issue_id: int = Field(..., description="Sub-issue ID"),
+        replace_parent: bool = Field(
+            False, description="Replace current parent when adding"
+        ),
+        after_id: int | None = Field(
+            None, description="Position after this sub-issue ID"
+        ),
+        before_id: int | None = Field(
+            None, description="Position before this sub-issue ID"
+        ),
+    ) -> str:
+        try:
+            result = sub_issue_write(
+                oauth_token,
+                owner,
+                repo,
+                issue_number,
+                method,
+                sub_issue_id,
+                replace_parent,
+                after_id,
+                before_id,
+            )
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "sub_issue_write",
+                    result,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["sub_issue_write"],
+                            "granted": granted_scopes,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed sub_issue_write for %s/%s#%d: %s",
+                owner,
+                repo,
+                issue_number,
+                exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "sub_issue_write",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed sub_issue_write for %s/%s#%d: %s",
+                owner,
+                repo,
+                issue_number,
+                exc,
+            )
+            return json.dumps(
+                error_response(
+                    "sub_issue_write",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while managing sub-issues.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="assign_copilot_to_issue",
+        description="Assign GitHub Copilot to work on an issue.",
+    )
+    def assign_copilot_to_issue_tool(
+        oauth_token: GitHubTokenData = Field(..., description="GitHub token"),
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        issue_number: int = Field(..., description="Issue number"),
+        base_ref: str | None = Field(
+            None, description="Git reference (branch) to start from"
+        ),
+        custom_instructions: str | None = Field(
+            None, description="Custom instructions for Copilot"
+        ),
+    ) -> str:
+        try:
+            result = assign_copilot_to_issue(
+                oauth_token, owner, repo, issue_number, base_ref, custom_instructions
+            )
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "assign_copilot_to_issue",
+                    result,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["assign_copilot_to_issue"],
+                            "granted": granted_scopes,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed assign_copilot_to_issue for %s/%s#%d: %s",
+                owner,
+                repo,
+                issue_number,
+                exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "assign_copilot_to_issue",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed assign_copilot_to_issue for %s/%s#%d: %s",
+                owner,
+                repo,
+                issue_number,
+                exc,
+            )
+            return json.dumps(
+                error_response(
+                    "assign_copilot_to_issue",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while assigning Copilot to issue.",
                     details={"exception": str(exc)},
                 )
             )

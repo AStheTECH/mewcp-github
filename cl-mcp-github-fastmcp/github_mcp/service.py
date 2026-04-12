@@ -2423,3 +2423,431 @@ def add_reply_to_pull_request_comment(
         "url": result.get("html_url"),
         "in_reply_to_id": result.get("in_reply_to_id"),
     }
+
+
+def get_latest_release(
+    oauth_token: GitHubTokenData,
+    owner: str,
+    repo: str,
+) -> dict[str, Any]:
+    """Get the latest release in a repository.
+
+    Args:
+        oauth_token: GitHub token
+        owner: Repository owner
+        repo: Repository name
+
+    Returns:
+        Dictionary with release details
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not all([owner, repo]):
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner and repo are required",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo"]},
+        )
+
+    result = _github_api_request(
+        oauth_token=oauth_token,
+        method="GET",
+        path=f"/repos/{owner}/{repo}/releases/latest",
+        required_scopes=required_scopes,
+    )
+
+    return {
+        "id": result.get("id"),
+        "tag_name": result.get("tag_name"),
+        "name": result.get("name"),
+        "draft": result.get("draft", False),
+        "prerelease": result.get("prerelease", False),
+        "created_at": result.get("created_at"),
+        "published_at": result.get("published_at"),
+        "url": result.get("html_url"),
+        "body": result.get("body"),
+        "author": result.get("author", {}).get("login"),
+    }
+
+
+def list_releases(
+    oauth_token: GitHubTokenData,
+    owner: str,
+    repo: str,
+    page: int = 1,
+    per_page: int = 30,
+) -> dict[str, Any]:
+    """List releases in a repository.
+
+    Args:
+        oauth_token: GitHub token
+        owner: Repository owner
+        repo: Repository name
+        page: Page number for pagination
+        per_page: Results per page
+
+    Returns:
+        Dictionary with releases list
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not all([owner, repo]):
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner and repo are required",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo"]},
+        )
+
+    per_page = min(100, max(1, per_page))
+
+    results = _github_api_request(
+        oauth_token=oauth_token,
+        method="GET",
+        path=f"/repos/{owner}/{repo}/releases",
+        params={"page": page, "per_page": per_page},
+        required_scopes=required_scopes,
+    )
+
+    releases = []
+    for release in results if isinstance(results, list) else []:
+        releases.append(
+            {
+                "id": release.get("id"),
+                "tag_name": release.get("tag_name"),
+                "name": release.get("name"),
+                "draft": release.get("draft", False),
+                "prerelease": release.get("prerelease", False),
+                "created_at": release.get("created_at"),
+                "published_at": release.get("published_at"),
+                "url": release.get("html_url"),
+                "author": release.get("author", {}).get("login"),
+            }
+        )
+
+    return {
+        "releases": releases,
+        "total_count": len(releases),
+        "page": page,
+        "per_page": per_page,
+    }
+
+
+def get_release_by_tag(
+    oauth_token: GitHubTokenData,
+    owner: str,
+    repo: str,
+    tag: str,
+) -> dict[str, Any]:
+    """Get a specific release by tag name.
+
+    Args:
+        oauth_token: GitHub token
+        owner: Repository owner
+        repo: Repository name
+        tag: Tag name (e.g., 'v1.0.0')
+
+    Returns:
+        Dictionary with release details
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not all([owner, repo, tag]):
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner, repo, and tag are required",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo", "tag"]},
+        )
+
+    result = _github_api_request(
+        oauth_token=oauth_token,
+        method="GET",
+        path=f"/repos/{owner}/{repo}/releases/tags/{tag}",
+        required_scopes=required_scopes,
+    )
+
+    return {
+        "id": result.get("id"),
+        "tag_name": result.get("tag_name"),
+        "name": result.get("name"),
+        "draft": result.get("draft", False),
+        "prerelease": result.get("prerelease", False),
+        "created_at": result.get("created_at"),
+        "published_at": result.get("published_at"),
+        "url": result.get("html_url"),
+        "body": result.get("body"),
+        "author": result.get("author", {}).get("login"),
+    }
+
+
+def get_label(
+    oauth_token: GitHubTokenData,
+    owner: str,
+    repo: str,
+    name: str,
+) -> dict[str, Any]:
+    """Get a specific label from a repository.
+
+    Args:
+        oauth_token: GitHub token
+        owner: Repository owner
+        repo: Repository name
+        name: Label name
+
+    Returns:
+        Dictionary with label details
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not all([owner, repo, name]):
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner, repo, and name are required",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo", "name"]},
+        )
+
+    result = _github_api_request(
+        oauth_token=oauth_token,
+        method="GET",
+        path=f"/repos/{owner}/{repo}/labels/{name}",
+        required_scopes=required_scopes,
+    )
+
+    return {
+        "id": result.get("id"),
+        "name": result.get("name"),
+        "color": result.get("color"),
+        "description": result.get("description"),
+        "url": result.get("url"),
+    }
+
+
+def get_me(oauth_token: GitHubTokenData) -> dict[str, Any]:
+    """Get details of the authenticated GitHub user.
+
+    Args:
+        oauth_token: GitHub token
+
+    Returns:
+        Dictionary with user profile details
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = []  # This endpoint doesn't require specific scopes
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    result = _github_api_request(
+        oauth_token=oauth_token,
+        method="GET",
+        path="/user",
+        required_scopes=required_scopes,
+    )
+
+    return {
+        "id": result.get("id"),
+        "login": result.get("login"),
+        "name": result.get("name"),
+        "email": result.get("email"),
+        "bio": result.get("bio"),
+        "company": result.get("company"),
+        "location": result.get("location"),
+        "public_repos": result.get("public_repos", 0),
+        "followers": result.get("followers", 0),
+        "following": result.get("following", 0),
+        "created_at": result.get("created_at"),
+        "updated_at": result.get("updated_at"),
+        "avatar_url": result.get("avatar_url"),
+        "profile_url": result.get("html_url"),
+    }
+
+
+def sub_issue_write(
+    oauth_token: GitHubTokenData,
+    owner: str,
+    repo: str,
+    issue_number: int,
+    method: str,
+    sub_issue_id: int,
+    replace_parent: bool = False,
+    after_id: int | None = None,
+    before_id: int | None = None,
+) -> dict[str, Any]:
+    """Manage sub-issues for a parent issue (add, remove, reprioritize).
+
+    Methods:
+    - add: Add a sub-issue to a parent issue
+    - remove: Remove a sub-issue from a parent issue
+    - reprioritize: Change order of sub-issues (use after_id or before_id)
+
+    Args:
+        oauth_token: GitHub token
+        owner: Repository owner
+        repo: Repository name
+        issue_number: Parent issue number
+        method: 'add', 'remove', or 'reprioritize'
+        sub_issue_id: ID of the sub-issue (not the issue number)
+        replace_parent: Replace current parent when adding (optional)
+        after_id: Sub-issue ID to position after (for reprioritize)
+        before_id: Sub-issue ID to position before (for reprioritize)
+
+    Returns:
+        Dictionary with operation result
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not all([owner, repo]) or issue_number <= 0 or sub_issue_id <= 0:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner, repo, issue_number, and sub_issue_id are required",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo", "issue_number", "sub_issue_id"]},
+        )
+
+    if method not in ["add", "remove", "reprioritize"]:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="method must be 'add', 'remove', or 'reprioritize'",
+            http_status=400,
+            retryable=False,
+            details={"valid_methods": ["add", "remove", "reprioritize"]},
+        )
+
+    if method == "reprioritize" and not (after_id or before_id):
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="reprioritize method requires either after_id or before_id",
+            http_status=400,
+            retryable=False,
+        )
+
+    request_body: dict[str, Any] = {
+        "sub_issue_id": sub_issue_id,
+    }
+
+    if method == "add":
+        request_body["replace_parent"] = replace_parent
+        if after_id:
+            request_body["after_id"] = after_id
+        if before_id:
+            request_body["before_id"] = before_id
+    elif method == "reprioritize":
+        if after_id:
+            request_body["after_id"] = after_id
+        if before_id:
+            request_body["before_id"] = before_id
+
+    # Note: GitHub's sub-issues use GraphQL primarily
+    try:
+        result = _github_api_request(
+            oauth_token=oauth_token,
+            method="PATCH" if method in ["add", "reprioritize"] else "DELETE",
+            path=f"/repos/{owner}/{repo}/issues/{issue_number}/sub_issues/{sub_issue_id}",
+            json_body=request_body if method in ["add", "reprioritize"] else None,
+            required_scopes=required_scopes,
+        )
+        return {
+            "method": method,
+            "sub_issue_id": sub_issue_id,
+            "success": True,
+            "message": f"Sub-issue {method} completed",
+        }
+    except GitHubServiceError as e:
+        # GraphQL-only feature fallback
+        if e.http_status and 404 in str(e.http_status):
+            raise GitHubServiceError(
+                code="NOT_AVAILABLE",
+                message="Sub-issues feature requires GitHub GraphQL API or enterprise features",
+                http_status=501,
+                details={"method": method, "requires": "GraphQL API access"},
+            )
+        raise
+
+
+def assign_copilot_to_issue(
+    oauth_token: GitHubTokenData,
+    owner: str,
+    repo: str,
+    issue_number: int,
+    base_ref: str | None = None,
+    custom_instructions: str | None = None,
+) -> dict[str, Any]:
+    """Assign GitHub Copilot to work on an issue.
+
+    This delegates the issue to Copilot to create a pull request with code changes.
+
+    Args:
+        oauth_token: GitHub token
+        owner: Repository owner
+        repo: Repository name
+        issue_number: Issue number
+        base_ref: Git reference (branch) to start from (optional, defaults to repo default)
+        custom_instructions: Additional context/guidance for Copilot (optional)
+
+    Returns:
+        Dictionary with job/PR details
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not all([owner, repo]) or issue_number <= 0:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner, repo, and issue_number are required",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo", "issue_number"]},
+        )
+
+    request_body: dict[str, Any] = {
+        "issue_number": issue_number,
+    }
+
+    if base_ref:
+        request_body["base_ref"] = base_ref
+    if custom_instructions:
+        request_body["custom_instructions"] = custom_instructions
+
+    # Note: This uses GitHub's Copilot API which may require special permissions
+    try:
+        result = _github_api_request(
+            oauth_token=oauth_token,
+            method="POST",
+            path=f"/repos/{owner}/{repo}/copilot/issues/{issue_number}/assignees",
+            json_body=request_body,
+            required_scopes=required_scopes,
+        )
+
+        return {
+            "issue_number": issue_number,
+            "assigned": True,
+            "job_id": result.get("id"),
+            "status": result.get("status", "pending"),
+            "pull_request_url": result.get("pull_request", {}).get("html_url"),
+        }
+    except GitHubServiceError as e:
+        if e.http_status and (404 in str(e.http_status) or 403 in str(e.http_status)):
+            raise GitHubServiceError(
+                code="NOT_AVAILABLE",
+                message="Copilot API requires GitHub Enterprise with Copilot access",
+                http_status=403,
+                details={"requires": "GitHub Enterprise + Copilot subscription"},
+            )
+        raise
