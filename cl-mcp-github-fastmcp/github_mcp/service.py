@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import time
 from typing import Any
 
 import httpx
@@ -155,6 +157,7 @@ def _github_api_request(
 def get_repo(
     oauth_token: GitHubTokenData | str, owner: str, repo: str
 ) -> dict[str, Any]:
+    """Get detailed repository information (get_repository enhanced version)."""
     payload = _github_api_request(
         oauth_token=oauth_token,
         method="GET",
@@ -166,10 +169,344 @@ def get_repo(
         "id": payload.get("id"),
         "name": payload.get("name"),
         "full_name": payload.get("full_name"),
-        "private": payload.get("private"),
-        "default_branch": payload.get("default_branch"),
+        "owner": payload.get("owner"),
         "html_url": payload.get("html_url"),
         "description": payload.get("description"),
+        "private": payload.get("private"),
+        "fork": payload.get("fork"),
+        "url": payload.get("url"),
+        "default_branch": payload.get("default_branch"),
+        "created_at": payload.get("created_at"),
+        "updated_at": payload.get("updated_at"),
+        "pushed_at": payload.get("pushed_at"),
+        "size": payload.get("size"),
+        "stargazers_count": payload.get("stargazers_count"),
+        "watchers_count": payload.get("watchers_count"),
+        "language": payload.get("language"),
+        "has_issues": payload.get("has_issues"),
+        "has_projects": payload.get("has_projects"),
+        "has_downloads": payload.get("has_downloads"),
+        "has_wiki": payload.get("has_wiki"),
+        "has_pages": payload.get("has_pages"),
+        "forks_count": payload.get("forks_count"),
+        "is_template": payload.get("is_template"),
+        "topics": payload.get("topics", []),
+    }
+
+
+def list_tags(
+    oauth_token: GitHubTokenData | str,
+    owner: str,
+    repo: str,
+    page: int = 1,
+    per_page: int = 30,
+) -> dict[str, Any]:
+    """List repository tags with pagination."""
+    payload = _github_api_request(
+        oauth_token=oauth_token,
+        method="GET",
+        path=f"/repos/{owner}/{repo}/tags",
+        params={"page": page, "per_page": per_page},
+        required_scopes=["repo"],
+    )
+
+    if not isinstance(payload, list):
+        payload = []
+
+    return {
+        "tags": [
+            {
+                "name": tag.get("name"),
+                "commit": tag.get("commit"),
+                "zipball_url": tag.get("zipball_url"),
+                "tarball_url": tag.get("tarball_url"),
+            }
+            for tag in payload
+        ],
+        "page": page,
+        "per_page": per_page,
+    }
+
+
+def get_tag(
+    oauth_token: GitHubTokenData | str,
+    owner: str,
+    repo: str,
+    tag: str,
+) -> dict[str, Any]:
+    """Get specific tag details."""
+    payload = _github_api_request(
+        oauth_token=oauth_token,
+        method="GET",
+        path=f"/repos/{owner}/{repo}/git/refs/tags/{tag}",
+        required_scopes=["repo"],
+    )
+
+    return {
+        "ref": payload.get("ref"),
+        "node_id": payload.get("node_id"),
+        "url": payload.get("url"),
+        "object": payload.get("object"),
+    }
+
+
+def create_repository(
+    oauth_token: GitHubTokenData | str,
+    name: str,
+    description: str | None = None,
+    private: bool = False,
+    auto_init: bool = False,
+    gitignore_template: str | None = None,
+    org: str | None = None,
+) -> dict[str, Any]:
+    """Create a new repository in personal account or organization."""
+    if org:
+        path = f"/orgs/{org}/repos"
+    else:
+        path = "/user/repos"
+
+    request_body = {
+        "name": name,
+        "description": description,
+        "private": private,
+        "auto_init": auto_init,
+    }
+    if gitignore_template:
+        request_body["gitignore_template"] = gitignore_template
+
+    payload = _github_api_request(
+        oauth_token=oauth_token,
+        method="POST",
+        path=path,
+        json_body=request_body,
+        required_scopes=["repo"],
+    )
+
+    return {
+        "id": payload.get("id"),
+        "name": payload.get("name"),
+        "full_name": payload.get("full_name"),
+        "url": payload.get("url"),
+        "html_url": payload.get("html_url"),
+        "owner": payload.get("owner"),
+        "private": payload.get("private"),
+        "created_at": payload.get("created_at"),
+    }
+
+
+def create_or_update_file(
+    oauth_token: GitHubTokenData | str,
+    owner: str,
+    repo: str,
+    path: str,
+    content: str,
+    message: str,
+    branch: str | None = None,
+    sha: str | None = None,
+) -> dict[str, Any]:
+    """Create or update file in repository."""
+    encoded_content = base64.b64encode(content.encode()).decode()
+    request_body = {
+        "message": message,
+        "content": encoded_content,
+    }
+    if branch:
+        request_body["branch"] = branch
+    if sha:
+        request_body["sha"] = sha
+
+    payload = _github_api_request(
+        oauth_token=oauth_token,
+        method="PUT",
+        path=f"/repos/{owner}/{repo}/contents/{path}",
+        json_body=request_body,
+        required_scopes=["repo"],
+    )
+
+    return {
+        "content": payload.get("content"),
+        "commit": payload.get("commit"),
+    }
+
+
+def fork_repository(
+    oauth_token: GitHubTokenData | str,
+    owner: str,
+    repo: str,
+    org: str | None = None,
+) -> dict[str, Any]:
+    """Fork a repository to personal account or organization."""
+    request_body = {}
+    if org:
+        request_body["organization"] = org
+
+    payload = _github_api_request(
+        oauth_token=oauth_token,
+        method="POST",
+        path=f"/repos/{owner}/{repo}/forks",
+        json_body=request_body,
+        required_scopes=["repo"],
+    )
+
+    return {
+        "id": payload.get("id"),
+        "name": payload.get("name"),
+        "full_name": payload.get("full_name"),
+        "url": payload.get("url"),
+        "html_url": payload.get("html_url"),
+        "owner": payload.get("owner"),
+        "fork": payload.get("fork"),
+    }
+
+
+def create_branch(
+    oauth_token: GitHubTokenData | str,
+    owner: str,
+    repo: str,
+    branch_name: str,
+    sha: str | None = None,
+) -> dict[str, Any]:
+    """Create a new branch in the repository."""
+    if not sha:
+        # Get default branch SHA if not provided
+        repo_data = get_repo(oauth_token, owner, repo)
+        default_branch = repo_data.get("default_branch", "main")
+        ref_payload = _github_api_request(
+            oauth_token=oauth_token,
+            method="GET",
+            path=f"/repos/{owner}/{repo}/git/refs/heads/{default_branch}",
+            required_scopes=["repo"],
+        )
+        sha = ref_payload.get("object", {}).get("sha")
+
+    request_body = {
+        "ref": f"refs/heads/{branch_name}",
+        "sha": sha,
+    }
+
+    payload = _github_api_request(
+        oauth_token=oauth_token,
+        method="POST",
+        path=f"/repos/{owner}/{repo}/git/refs",
+        json_body=request_body,
+        required_scopes=["repo"],
+    )
+
+    return {
+        "ref": payload.get("ref"),
+        "node_id": payload.get("node_id"),
+        "url": payload.get("url"),
+        "object": payload.get("object"),
+    }
+
+
+def push_files(
+    oauth_token: GitHubTokenData | str,
+    owner: str,
+    repo: str,
+    files: list[dict[str, str]],
+    message: str,
+    branch: str | None = None,
+    author_name: str | None = None,
+    author_email: str | None = None,
+) -> dict[str, Any]:
+    """Push multiple files in a single atomic commit."""
+    if not branch:
+        repo_data = get_repo(oauth_token, owner, repo)
+        branch = repo_data.get("default_branch", "main")
+
+    # Get current branch reference
+    try:
+        ref_payload = _github_api_request(
+            oauth_token=oauth_token,
+            method="GET",
+            path=f"/repos/{owner}/{repo}/git/refs/heads/{branch}",
+            required_scopes=["repo"],
+        )
+        parent_sha = ref_payload.get("object", {}).get("sha")
+    except GitHubServiceError:
+        # Branch may not exist, try to create from default
+        parent_sha = None
+
+    # Get parent tree (if committing to existing branch)
+    parent_tree_sha = None
+    if parent_sha:
+        commit_payload = _github_api_request(
+            oauth_token=oauth_token,
+            method="GET",
+            path=f"/repos/{owner}/{repo}/git/commits/{parent_sha}",
+            required_scopes=["repo"],
+        )
+        parent_tree_sha = commit_payload.get("tree", {}).get("sha")
+
+    # Create tree with new files
+    tree_items = []
+    for file_item in files:
+        content = file_item.get("content", "")
+        path = file_item.get("path", "")
+        encoded_content = base64.b64encode(content.encode()).decode()
+        tree_items.append(
+            {
+                "path": path,
+                "mode": "100644",
+                "type": "blob",
+                "content": content,
+            }
+        )
+
+    tree_request = {"tree": tree_items}
+    if parent_tree_sha:
+        tree_request["base_tree"] = parent_tree_sha
+
+    tree_payload = _github_api_request(
+        oauth_token=oauth_token,
+        method="POST",
+        path=f"/repos/{owner}/{repo}/git/trees",
+        json_body=tree_request,
+        required_scopes=["repo"],
+    )
+    new_tree_sha = tree_payload.get("sha")
+
+    commit_request = {
+        "message": message,
+        "tree": new_tree_sha,
+    }
+    if parent_sha:
+        commit_request["parents"] = [parent_sha]
+
+    if author_name and author_email:
+        commit_request["author"] = {
+            "name": author_name,
+            "email": author_email,
+            "date": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+
+    commit_payload = _github_api_request(
+        oauth_token=oauth_token,
+        method="POST",
+        path=f"/repos/{owner}/{repo}/git/commits",
+        json_body=commit_request,
+        required_scopes=["repo"],
+    )
+    new_commit_sha = commit_payload.get("sha")
+
+    # Update branch reference
+    update_request = {"sha": new_commit_sha, "force": False}
+
+    ref_payload = _github_api_request(
+        oauth_token=oauth_token,
+        method="PATCH",
+        path=f"/repos/{owner}/{repo}/git/refs/heads/{branch}",
+        json_body=update_request,
+        required_scopes=["repo"],
+    )
+
+    return {
+        "commit_sha": new_commit_sha,
+        "tree_sha": new_tree_sha,
+        "branch": branch,
+        "message": message,
+        "url": ref_payload.get("url"),
     }
 
 

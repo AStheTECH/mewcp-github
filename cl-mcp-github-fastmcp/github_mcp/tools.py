@@ -10,16 +10,23 @@ from .schemas import GitHubTokenData
 from .service import (
     GitHubServiceError,
     add_issue_comment,
+    create_branch,
     create_issue,
+    create_or_update_file,
+    create_repository,
+    fork_repository,
     get_file_contents,
     get_commit,
     get_issue,
     get_issue_comments,
     get_repo as get_repo_service,
+    get_tag,
     list_branches,
     list_commits,
     list_issues,
     list_org_repositories_by_contributor,
+    list_tags,
+    push_files,
     search_repositories,
     search_code,
     search_users,
@@ -1179,6 +1186,520 @@ def register_tools(mcp: FastMCP) -> None:
                     "list_org_repositories_by_contributor",
                     code="INTERNAL_ERROR",
                     message="Unexpected error while finding repositories by contributor.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="list_tags",
+        description="List all git tags in a repository with pagination support. Returns tag names, commit info, and download URLs.",
+    )
+    def list_tags_tool(
+        oauth_token: GitHubTokenData = Field(
+            ...,
+            description="GitHub personal access token or OAuth token (with repo scope)",
+        ),
+        owner: str = Field(
+            ..., description="Repository owner name. Example: 'github'."
+        ),
+        repo: str = Field(
+            ..., description="Repository name. Example: 'github-mcp-server'."
+        ),
+        page: int = Field(
+            1,
+            description="Page number for pagination. Starts at 1. Default: 1.",
+        ),
+        perPage: int = Field(
+            30,
+            description="Number of tags per page. Range: 1-100. Default: 30.",
+        ),
+    ) -> str:
+        try:
+            data = list_tags(oauth_token, owner, repo, page=page, per_page=perPage)
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "list_tags",
+                    data,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["list_tags"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        },
+                        "pagination": {
+                            "page": page,
+                            "perPage": perPage,
+                        },
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error("Failed list_tags for %s/%s: %s", owner, repo, exc.message)
+            return json.dumps(
+                error_response(
+                    "list_tags",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error("Failed list_tags for %s/%s: %s", owner, repo, exc)
+            return json.dumps(
+                error_response(
+                    "list_tags",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while listing tags.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="get_tag",
+        description="Get detailed information about a specific git tag including commit SHA and object info.",
+    )
+    def get_tag_tool(
+        oauth_token: GitHubTokenData = Field(
+            ...,
+            description="GitHub personal access token or OAuth token (with repo scope)",
+        ),
+        owner: str = Field(
+            ..., description="Repository owner name. Example: 'github'."
+        ),
+        repo: str = Field(
+            ..., description="Repository name. Example: 'github-mcp-server'."
+        ),
+        tag: str = Field(
+            ...,
+            description="Tag name to retrieve. Example: 'v1.0.0' or 'release-2024-01'.",
+        ),
+    ) -> str:
+        try:
+            data = get_tag(oauth_token, owner, repo, tag)
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "get_tag",
+                    data,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["get_tag"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed get_tag for %s/%s:%s: %s", owner, repo, tag, exc.message
+            )
+            return json.dumps(
+                error_response(
+                    "get_tag",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error("Failed get_tag for %s/%s:%s: %s", owner, repo, tag, exc)
+            return json.dumps(
+                error_response(
+                    "get_tag",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while fetching tag details.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="create_repository",
+        description="Create a new GitHub repository in your personal account or an organization.",
+    )
+    def create_repository_tool(
+        oauth_token: GitHubTokenData = Field(
+            ...,
+            description="GitHub personal access token or OAuth token (with repo scope)",
+        ),
+        name: str = Field(
+            ...,
+            description="Repository name (required). Must be unique in account/organization.",
+        ),
+        description: str | None = Field(
+            None,
+            description="Repository description (optional). Shown on repository homepage.",
+        ),
+        private: bool = Field(
+            False,
+            description="Make repository private (default: False for public). Requires repo scope.",
+        ),
+        auto_init: bool = Field(
+            False,
+            description="Auto-initialize with README, .gitignore, and license (default: False).",
+        ),
+        gitignore_template: str | None = Field(
+            None,
+            description="Gitignore template name. Example: 'Python', 'Node', 'Java'. Only used with auto_init=true.",
+        ),
+        org: str | None = Field(
+            None,
+            description="Organization name to create repo in (optional). If omitted, creates in personal account.",
+        ),
+    ) -> str:
+        try:
+            data = create_repository(
+                oauth_token,
+                name=name,
+                description=description,
+                private=private,
+                auto_init=auto_init,
+                gitignore_template=gitignore_template,
+                org=org,
+            )
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "create_repository",
+                    data,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["create_repository"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error("Failed create_repository for %s: %s", name, exc.message)
+            return json.dumps(
+                error_response(
+                    "create_repository",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error("Failed create_repository for %s: %s", name, exc)
+            return json.dumps(
+                error_response(
+                    "create_repository",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while creating repository.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="create_or_update_file",
+        description="Create or update a file in a repository. Prevents accidental overwrites with SHA validation.",
+    )
+    def create_or_update_file_tool(
+        oauth_token: GitHubTokenData = Field(
+            ...,
+            description="GitHub personal access token or OAuth token (with repo scope)",
+        ),
+        owner: str = Field(..., description="Repository owner name."),
+        repo: str = Field(..., description="Repository name."),
+        path: str = Field(
+            ...,
+            description="File path in repository. Example: 'src/main.py' or 'README.md'. Create directories as needed.",
+        ),
+        content: str = Field(
+            ...,
+            description="File content to write. For binary files, base64 encode first.",
+        ),
+        message: str = Field(
+            ...,
+            description="Commit message. Example: 'Update README with installation steps'.",
+        ),
+        branch: str | None = Field(
+            None,
+            description="Target branch name (optional). If omitted, uses repository default branch.",
+        ),
+        sha: str | None = Field(
+            None,
+            description="File SHA (optional, for updates only). Prevents overwrite conflicts. Get from get_file_contents.",
+        ),
+    ) -> str:
+        try:
+            data = create_or_update_file(
+                oauth_token,
+                owner=owner,
+                repo=repo,
+                path=path,
+                content=content,
+                message=message,
+                branch=branch,
+                sha=sha,
+            )
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "create_or_update_file",
+                    data,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["create_or_update_file"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed create_or_update_file for %s/%s:%s: %s",
+                owner,
+                repo,
+                path,
+                exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "create_or_update_file",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed create_or_update_file for %s/%s:%s: %s",
+                owner,
+                repo,
+                path,
+                exc,
+            )
+            return json.dumps(
+                error_response(
+                    "create_or_update_file",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while creating or updating file.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="fork_repository",
+        description="Fork a repository to your personal account or an organization.",
+    )
+    def fork_repository_tool(
+        oauth_token: GitHubTokenData = Field(
+            ...,
+            description="GitHub personal access token or OAuth token (with repo scope)",
+        ),
+        owner: str = Field(..., description="Original repository owner."),
+        repo: str = Field(..., description="Original repository name."),
+        org: str | None = Field(
+            None,
+            description="Organization name to fork into (optional). If omitted, forks to personal account.",
+        ),
+    ) -> str:
+        try:
+            data = fork_repository(oauth_token, owner=owner, repo=repo, org=org)
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "fork_repository",
+                    data,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["fork_repository"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed fork_repository for %s/%s: %s", owner, repo, exc.message
+            )
+            return json.dumps(
+                error_response(
+                    "fork_repository",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error("Failed fork_repository for %s/%s: %s", owner, repo, exc)
+            return json.dumps(
+                error_response(
+                    "fork_repository",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while forking repository.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="create_branch",
+        description="Create a new branch in a repository from source branch or commit SHA.",
+    )
+    def create_branch_tool(
+        oauth_token: GitHubTokenData = Field(
+            ...,
+            description="GitHub personal access token or OAuth token (with repo scope)",
+        ),
+        owner: str = Field(..., description="Repository owner name."),
+        repo: str = Field(..., description="Repository name."),
+        branch_name: str = Field(
+            ...,
+            description="New branch name to create. Example: 'feature/new-feature' or 'bugfix/issue-123'.",
+        ),
+        sha: str | None = Field(
+            None,
+            description="Commit SHA to branch from (optional). If omitted, branches from default branch.",
+        ),
+    ) -> str:
+        try:
+            data = create_branch(
+                oauth_token, owner=owner, repo=repo, branch_name=branch_name, sha=sha
+            )
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "create_branch",
+                    data,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["create_branch"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed create_branch for %s/%s:%s: %s",
+                owner,
+                repo,
+                branch_name,
+                exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "create_branch",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed create_branch for %s/%s:%s: %s",
+                owner,
+                repo,
+                branch_name,
+                exc,
+            )
+            return json.dumps(
+                error_response(
+                    "create_branch",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while creating branch.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="push_files",
+        description="Push multiple files to a repository in a single atomic commit. Supports creating new branches and file directories.",
+    )
+    def push_files_tool(
+        oauth_token: GitHubTokenData = Field(
+            ...,
+            description="GitHub personal access token or OAuth token (with repo scope)",
+        ),
+        owner: str = Field(..., description="Repository owner name."),
+        repo: str = Field(..., description="Repository name."),
+        files_json: str = Field(
+            ...,
+            description='JSON array of file objects with \'path\' and \'content\' keys. Example: \'[{"path": "file1.txt", "content": "hello"}, {"path": "dir/file2.txt", "content": "world"}]\'',
+        ),
+        message: str = Field(
+            ...,
+            description="Commit message describing changes.",
+        ),
+        branch: str | None = Field(
+            None,
+            description="Target branch name (optional). If omitted, uses repository default branch.",
+        ),
+        author_name: str | None = Field(
+            None,
+            description="Author name for commit (optional). If omitted, uses authenticated user.",
+        ),
+        author_email: str | None = Field(
+            None,
+            description="Author email for commit (optional). If omitted, uses authenticated user.",
+        ),
+    ) -> str:
+        try:
+            import json as json_lib
+
+            files = json_lib.loads(files_json)
+            data = push_files(
+                oauth_token,
+                owner=owner,
+                repo=repo,
+                files=files,
+                message=message,
+                branch=branch,
+                author_name=author_name,
+                author_email=author_email,
+            )
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "push_files",
+                    data,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["push_files"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error("Failed push_files for %s/%s: %s", owner, repo, exc.message)
+            return json.dumps(
+                error_response(
+                    "push_files",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error("Failed push_files for %s/%s: %s", owner, repo, exc)
+            return json.dumps(
+                error_response(
+                    "push_files",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while pushing files.",
                     details={"exception": str(exc)},
                 )
             )

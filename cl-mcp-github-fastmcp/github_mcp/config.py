@@ -20,6 +20,13 @@ TOOL_REQUIRED_SCOPES = {
     "update_issue": ["repo"],
     "get_file_contents": ["repo"],
     "list_org_repositories_by_contributor": ["repo"],
+    "list_tags": ["repo"],
+    "get_tag": ["repo"],
+    "create_repository": ["repo"],
+    "create_or_update_file": ["repo"],
+    "fork_repository": ["repo"],
+    "create_branch": ["repo"],
+    "push_files": ["repo"],
 }
 
 

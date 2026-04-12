@@ -28,7 +28,7 @@ Perfect! Let me organize this strategically. First, let me identify what's alrea
 - update_issue
 
 **Phase 4: Repository Core - Read (3 tools)**
-- get_repository (detailed version)
+- get_repository (update the curruent get_repo tool with this detailed version)
 - list_tags
 - get_tag
 
