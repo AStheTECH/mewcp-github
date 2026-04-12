@@ -17,6 +17,9 @@ from .service import (
     list_issues,
     list_org_repositories_by_contributor,
     search_repositories,
+    search_code,
+    search_users,
+    search_issues,
 )
 
 logger = logging.getLogger("github-mcp-server")
@@ -435,6 +438,246 @@ def register_tools(mcp: FastMCP) -> None:
                     "get_file_contents",
                     code="INTERNAL_ERROR",
                     message="Unexpected error while fetching file contents.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="search_code",
+        description="Fast and precise code search across GitHub repositories using GitHub's native search engine. Best for finding exact symbols, functions, classes, or specific code patterns.",
+    )
+    def search_code_tool(
+        oauth_token: GitHubTokenData = Field(
+            ...,
+            description="GitHub personal access token or OAuth token (with repo scope)",
+        ),
+        query: str = Field(
+            ...,
+            description="Search query using GitHub code search syntax. Examples: 'content:Skill language:Java org:github', 'NOT is:archived language:Python OR language:go', 'repo:github/github-mcp-server', 'filename:test.py', 'path:src/components'. Supports exact matching, language filters, path filters, org filters, and more.",
+        ),
+        sort: str = Field(
+            "indexed",
+            description="Sort field for results. Only 'indexed' is supported (by relevance). Default: 'indexed'.",
+        ),
+        order: str = Field(
+            "desc",
+            description="Sort order for results. Options: 'asc' (ascending) or 'desc' (descending). Default: 'desc'.",
+        ),
+        page: int = Field(
+            1,
+            description="Page number for pagination. Starts at 1. Use with perPage to browse results. Default: 1.",
+        ),
+        perPage: int = Field(
+            30,
+            description="Number of results per page. Range: 1-100. Default: 30. Increase for fewer API calls, decrease for smaller responses.",
+        ),
+    ) -> str:
+        try:
+            data = search_code(
+                oauth_token, query, sort=sort, order=order, page=page, per_page=perPage
+            )
+            granted_scopes = oauth_token.get("scopes", [])
+            return json.dumps(
+                success_response(
+                    "search_code",
+                    data,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["search_code"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        },
+                        "pagination": {
+                            "page": page,
+                            "perPage": perPage,
+                        },
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error("Failed search_code: %s", exc.message)
+            return json.dumps(
+                error_response(
+                    "search_code",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error("Failed search_code: %s", exc)
+            return json.dumps(
+                error_response(
+                    "search_code",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while searching code.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="search_users",
+        description="Search GitHub users by name, location, followers, or other attributes. Returns user profiles with login, ID, and avatar URL for further investigation.",
+    )
+    def search_users_tool(
+        oauth_token: GitHubTokenData = Field(
+            ...,
+            description="GitHub personal access token or OAuth token (with repo scope)",
+        ),
+        query: str = Field(
+            ...,
+            description="User search query using GitHub's search syntax. Examples: 'john smith', 'location:seattle', 'followers:>100', 'repos:>50 language:python'. Support full name, location, follower counts, repository counts, and more.",
+        ),
+        sort: str = Field(
+            "followers",
+            description="Sort field for user results. Options: 'followers' (most followers first), 'repositories' (most repos first), 'joined' (newest users first). Default: 'followers'.",
+        ),
+        order: str = Field(
+            "desc",
+            description="Sort order for results. Options: 'asc' (ascending) or 'desc' (descending). Default: 'desc' (most relevant first).",
+        ),
+        page: int = Field(
+            1,
+            description="Page number for pagination. Starts at 1. Use with perPage to browse results. Default: 1.",
+        ),
+        perPage: int = Field(
+            30,
+            description="Number of results per page. Range: 1-100. Default: 30. Increase for fewer API calls, decrease for smaller responses.",
+        ),
+    ) -> str:
+        try:
+            data = search_users(
+                oauth_token, query, sort=sort, order=order, page=page, per_page=perPage
+            )
+            granted_scopes = oauth_token.get("scopes", [])
+            return json.dumps(
+                success_response(
+                    "search_users",
+                    data,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["search_users"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        },
+                        "pagination": {
+                            "page": page,
+                            "perPage": perPage,
+                        },
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error("Failed search_users: %s", exc.message)
+            return json.dumps(
+                error_response(
+                    "search_users",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error("Failed search_users: %s", exc)
+            return json.dumps(
+                error_response(
+                    "search_users",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while searching users.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="search_issues",
+        description="Search issues and pull requests across GitHub. Filter by state, labels, creator, assignee, and more. Use owner+repo parameters to scope search to specific repositories.",
+    )
+    def search_issues_tool(
+        oauth_token: GitHubTokenData = Field(
+            ...,
+            description="GitHub personal access token or OAuth token (with repo scope)",
+        ),
+        query: str = Field(
+            ...,
+            description="Search query using GitHub issue search syntax. Examples: 'is:open label:bug', 'is:closed author:octocat', 'type:issue state:open label:enhancement'. Supports state filters, label filters, author filters, assignee filters, and more.",
+        ),
+        sort: str = Field(
+            "updated",
+            description="Sort field for issue results. Options: 'updated', 'created', 'comments'. Default: 'updated' (most recently updated first).",
+        ),
+        order: str = Field(
+            "desc",
+            description="Sort order for results. Options: 'asc' (ascending) or 'desc' (descending). Default: 'desc' (most recent first).",
+        ),
+        owner: str | None = Field(
+            None,
+            description="Repository owner name. Optional, but when provided must be paired with 'repo' parameter to scope search to specific repository. Example: 'github'.",
+        ),
+        repo: str | None = Field(
+            None,
+            description="Repository name. Optional, but when provided must be paired with 'owner' parameter to scope search to specific repository. Example: 'github-mcp-server'.",
+        ),
+        page: int = Field(
+            1,
+            description="Page number for pagination. Starts at 1. Use with perPage to browse results. Default: 1.",
+        ),
+        perPage: int = Field(
+            30,
+            description="Number of results per page. Range: 1-100. Default: 30. Increase for fewer API calls, decrease for smaller responses.",
+        ),
+    ) -> str:
+        try:
+            data = search_issues(
+                oauth_token,
+                query,
+                sort=sort,
+                order=order,
+                owner=owner,
+                repo=repo,
+                page=page,
+                per_page=perPage,
+            )
+            granted_scopes = oauth_token.get("scopes", [])
+            return json.dumps(
+                success_response(
+                    "search_issues",
+                    data,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["search_issues"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        },
+                        "pagination": {
+                            "page": page,
+                            "perPage": perPage,
+                        },
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error("Failed search_issues: %s", exc.message)
+            return json.dumps(
+                error_response(
+                    "search_issues",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error("Failed search_issues: %s", exc)
+            return json.dumps(
+                error_response(
+                    "search_issues",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while searching issues.",
                     details={"exception": str(exc)},
                 )
             )

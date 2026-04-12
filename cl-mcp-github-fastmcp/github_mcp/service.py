@@ -460,6 +460,224 @@ def get_file_contents(
     }
 
 
+def search_code(
+    oauth_token: GitHubTokenData | str,
+    query: str,
+    sort: str = "indexed",
+    order: str = "desc",
+    page: int = 1,
+    per_page: int = 30,
+) -> dict[str, Any]:
+    """Search code across GitHub repositories.
+
+    Args:
+        oauth_token: GitHub personal access token or OAuth token
+        query: Code search query (e.g., 'fmt.Println language:go')
+        sort: Sort field (default: 'indexed')
+        order: Sort order ('asc' or 'desc', default: 'desc')
+        page: Page number (default: 1)
+        per_page: Results per page (default: 30, max: 100)
+
+    Returns:
+        Dictionary with search results
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not query.strip():
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="Search query cannot be empty",
+            http_status=400,
+            retryable=False,
+            details={"field": "query"},
+        )
+
+    per_page = min(100, max(1, per_page))
+
+    results = _github_api_request(
+        oauth_token=token_data["token"],
+        method="GET",
+        path="/search/code",
+        params={
+            "q": query,
+            "sort": sort,
+            "order": order,
+            "page": page,
+            "per_page": per_page,
+        },
+    )
+
+    # Minimal response shape
+    return {
+        "total_count": results.get("total_count", 0),
+        "incomplete_results": results.get("incomplete_results", False),
+        "items": [
+            {
+                "name": item.get("name"),
+                "path": item.get("path"),
+                "repository": item.get("repository", {}).get("full_name"),
+                "url": item.get("html_url"),
+            }
+            for item in results.get("items", [])
+        ],
+    }
+
+
+def search_users(
+    oauth_token: GitHubTokenData | str,
+    query: str,
+    sort: str = "followers",
+    order: str = "desc",
+    page: int = 1,
+    per_page: int = 30,
+) -> dict[str, Any]:
+    """Search GitHub users.
+
+    Args:
+        oauth_token: GitHub personal access token or OAuth token
+        query: User search query (e.g., 'john smith', 'location:seattle')
+        sort: Sort field ('followers', 'repositories', 'joined', default: 'followers')
+        order: Sort order ('asc' or 'desc', default: 'desc')
+        page: Page number (default: 1)
+        per_page: Results per page (default: 30, max: 100)
+
+    Returns:
+        Dictionary with search results
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not query.strip():
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="Search query cannot be empty",
+            http_status=400,
+            retryable=False,
+            details={"field": "query"},
+        )
+
+    # Preprocess query: add type:user if missing
+    search_query = query
+    if "type:user" not in search_query.lower():
+        search_query = f"type:user {search_query}"
+
+    per_page = min(100, max(1, per_page))
+
+    results = _github_api_request(
+        oauth_token=token_data["token"],
+        method="GET",
+        path="/search/users",
+        params={
+            "q": search_query,
+            "sort": sort,
+            "order": order,
+            "page": page,
+            "per_page": per_page,
+        },
+    )
+
+    # Minimal response shape
+    return {
+        "total_count": results.get("total_count", 0),
+        "incomplete_results": results.get("incomplete_results", False),
+        "items": [
+            {
+                "login": item.get("login"),
+                "id": item.get("id"),
+                "profile_url": item.get("html_url"),
+                "avatar_url": item.get("avatar_url"),
+            }
+            for item in results.get("items", [])
+        ],
+    }
+
+
+def search_issues(
+    oauth_token: GitHubTokenData | str,
+    query: str,
+    sort: str = "updated",
+    order: str = "desc",
+    owner: str | None = None,
+    repo: str | None = None,
+    page: int = 1,
+    per_page: int = 30,
+) -> dict[str, Any]:
+    """Search issues across GitHub repositories.
+
+    Args:
+        oauth_token: GitHub personal access token or OAuth token
+        query: Issue search query
+        sort: Sort field (default: 'updated')
+        order: Sort order ('asc' or 'desc', default: 'desc')
+        owner: Repository owner (optional, requires repo)
+        repo: Repository name (optional, requires owner)
+        page: Page number (default: 1)
+        per_page: Results per page (default: 30, max: 100)
+
+    Returns:
+        Dictionary with search results
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not query.strip():
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="Search query cannot be empty",
+            http_status=400,
+            retryable=False,
+            details={"field": "query"},
+        )
+
+    # Preprocess query
+    search_query = query
+
+    # Add is:issue if not present
+    if "is:issue" not in search_query.lower():
+        search_query = f"is:issue {search_query}"
+
+    # Add repo filter if both owner and repo provided and not already in query
+    if owner and repo and "repo:" not in search_query.lower():
+        search_query = f"repo:{owner}/{repo} {search_query}"
+
+    per_page = min(100, max(1, per_page))
+
+    results = _github_api_request(
+        oauth_token=token_data["token"],
+        method="GET",
+        path="/search/issues",
+        params={
+            "q": search_query,
+            "sort": sort,
+            "order": order,
+            "page": page,
+            "per_page": per_page,
+        },
+    )
+
+    # Minimal response shape
+    return {
+        "total_count": results.get("total_count", 0),
+        "incomplete_results": results.get("incomplete_results", False),
+        "items": [
+            {
+                "number": item.get("number"),
+                "title": item.get("title"),
+                "state": item.get("state"),
+                "body": item.get("body"),
+                "url": item.get("html_url"),
+                "comments": item.get("comments", 0),
+                "user": item.get("user", {}).get("login"),
+            }
+            for item in results.get("items", [])
+        ],
+    }
+
+
 def list_org_repositories_by_contributor(
     oauth_token: GitHubTokenData | str,
     org: str,
