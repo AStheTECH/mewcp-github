@@ -4,8 +4,9 @@ __pycache__/
 /venv
 venv
 /.venv
-oauth_script
+oauth_script.py
 /oauth_script.py
 .github
 /.github/*
 env
+

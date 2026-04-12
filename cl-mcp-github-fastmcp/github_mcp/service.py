@@ -28,22 +28,18 @@ class GitHubServiceError(Exception):
         self.details = details or {}
 
 
-def get_token_data(oauth_token: GitHubTokenData | str) -> dict[str, Any]:
-    if isinstance(oauth_token, str):
-        return {
-            "token": oauth_token,
-            "scopes": [],
-        }
-
+def get_token_data(oauth_token: GitHubTokenData) -> dict[str, Any]:
+    """Extract token and scopes from GitHubTokenData"""
     return {
         "token": oauth_token.token,
-        "scopes": oauth_token.scopes or [],
+        "scopes": oauth_token.scopes,  # Pydantic default ["repo"] already applied
     }
 
 
 def _validate_required_scopes(
     granted_scopes: list[str], required_scopes: list[str]
 ) -> None:
+    """Validate that token has all required scopes."""
     if not required_scopes:
         return
 
@@ -74,7 +70,7 @@ def _validate_required_scopes(
 
 def _github_api_request(
     *,
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     method: str,
     path: str,
     params: dict[str, Any] | None = None,
@@ -154,9 +150,7 @@ def _github_api_request(
     return response.json()
 
 
-def get_repo(
-    oauth_token: GitHubTokenData | str, owner: str, repo: str
-) -> dict[str, Any]:
+def get_repo(oauth_token: GitHubTokenData, owner: str, repo: str) -> dict[str, Any]:
     """Get detailed repository information (get_repository enhanced version)."""
     payload = _github_api_request(
         oauth_token=oauth_token,
@@ -169,7 +163,13 @@ def get_repo(
         "id": payload.get("id"),
         "name": payload.get("name"),
         "full_name": payload.get("full_name"),
-        "owner": payload.get("owner"),
+        "owner": {
+            "login": payload.get("owner", {}).get("login"),
+            "id": payload.get("owner", {}).get("id"),
+            "node_id": payload.get("owner", {}).get("node_id"),
+            "url": payload.get("owner", {}).get("url"),
+            "html_url": payload.get("owner", {}).get("html_url"),
+        },
         "html_url": payload.get("html_url"),
         "description": payload.get("description"),
         "private": payload.get("private"),
@@ -178,24 +178,16 @@ def get_repo(
         "default_branch": payload.get("default_branch"),
         "created_at": payload.get("created_at"),
         "updated_at": payload.get("updated_at"),
-        "pushed_at": payload.get("pushed_at"),
-        "size": payload.get("size"),
         "stargazers_count": payload.get("stargazers_count"),
-        "watchers_count": payload.get("watchers_count"),
         "language": payload.get("language"),
         "has_issues": payload.get("has_issues"),
-        "has_projects": payload.get("has_projects"),
         "has_downloads": payload.get("has_downloads"),
-        "has_wiki": payload.get("has_wiki"),
-        "has_pages": payload.get("has_pages"),
         "forks_count": payload.get("forks_count"),
-        "is_template": payload.get("is_template"),
-        "topics": payload.get("topics", []),
     }
 
 
 def list_tags(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     page: int = 1,
@@ -229,7 +221,7 @@ def list_tags(
 
 
 def get_tag(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     tag: str,
@@ -251,7 +243,7 @@ def get_tag(
 
 
 def create_repository(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     name: str,
     description: str | None = None,
     private: bool = False,
@@ -295,7 +287,7 @@ def create_repository(
 
 
 def create_or_update_file(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     path: str,
@@ -330,7 +322,7 @@ def create_or_update_file(
 
 
 def fork_repository(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     org: str | None = None,
@@ -360,7 +352,7 @@ def fork_repository(
 
 
 def create_branch(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     branch_name: str,
@@ -401,7 +393,7 @@ def create_branch(
 
 
 def push_files(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     files: list[dict[str, str]],
@@ -511,7 +503,7 @@ def push_files(
 
 
 def list_branches(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     page: int = 1,
@@ -540,7 +532,7 @@ def list_branches(
 
 
 def search_repositories(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     query: str,
     sort: str = "stars",
     order: str = "desc",
@@ -585,7 +577,7 @@ def search_repositories(
 
 
 def list_commits(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     sha: str | None = None,
@@ -648,7 +640,7 @@ def list_commits(
 
 
 def get_commit(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     sha: str,
@@ -700,7 +692,7 @@ def get_commit(
 
 
 def list_issues(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     state: str = "open",
@@ -748,7 +740,7 @@ def list_issues(
 
 
 def get_file_contents(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     path: str = "/",
@@ -798,7 +790,7 @@ def get_file_contents(
 
 
 def search_code(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     query: str,
     sort: str = "indexed",
     order: str = "desc",
@@ -862,7 +854,7 @@ def search_code(
 
 
 def search_users(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     query: str,
     sort: str = "followers",
     order: str = "desc",
@@ -931,7 +923,7 @@ def search_users(
 
 
 def search_issues(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     query: str,
     sort: str = "updated",
     order: str = "desc",
@@ -1013,7 +1005,7 @@ def search_issues(
 
 
 def get_issue(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     issue_number: int,
@@ -1066,7 +1058,7 @@ def get_issue(
 
 
 def get_issue_comments(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     issue_number: int,
@@ -1195,7 +1187,7 @@ def create_issue(
 
 
 def add_issue_comment(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     issue_number: int,
