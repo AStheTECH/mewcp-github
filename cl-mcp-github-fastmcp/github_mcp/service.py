@@ -678,6 +678,124 @@ def search_issues(
     }
 
 
+def get_issue(
+    oauth_token: GitHubTokenData | str,
+    owner: str,
+    repo: str,
+    issue_number: int,
+) -> dict[str, Any]:
+    """Get a single GitHub issue by number.
+
+    Args:
+        oauth_token: GitHub personal access token or OAuth token
+        owner: Repository owner
+        repo: Repository name
+        issue_number: Issue number
+
+    Returns:
+        Dictionary with issue data
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo", "public_repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not owner or not repo or issue_number <= 0:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner, repo, and issue_number must be provided and valid",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo", "issue_number"]},
+        )
+
+    result = _github_api_request(
+        oauth_token=token_data["token"],
+        method="GET",
+        path=f"/repos/{owner}/{repo}/issues/{issue_number}",
+        params={},
+    )
+
+    # Minimal response shape
+    return {
+        "number": result.get("number"),
+        "title": result.get("title"),
+        "body": result.get("body"),
+        "state": result.get("state"),
+        "state_reason": result.get("state_reason"),
+        "labels": [label.get("name") for label in result.get("labels", [])],
+        "assignees": [a.get("login") for a in result.get("assignees", [])],
+        "url": result.get("html_url"),
+        "user": result.get("user", {}).get("login"),
+        "created_at": result.get("created_at"),
+        "updated_at": result.get("updated_at"),
+        "closed_at": result.get("closed_at"),
+    }
+
+
+def get_issue_comments(
+    oauth_token: GitHubTokenData | str,
+    owner: str,
+    repo: str,
+    issue_number: int,
+    page: int = 1,
+    per_page: int = 30,
+) -> dict[str, Any]:
+    """Get comments on a GitHub issue.
+
+    Args:
+        oauth_token: GitHub personal access token or OAuth token
+        owner: Repository owner
+        repo: Repository name
+        issue_number: Issue number
+        page: Page number (default: 1)
+        per_page: Results per page (default: 30, max: 100)
+
+    Returns:
+        Dictionary with comments data
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo", "public_repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not owner or not repo or issue_number <= 0:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner, repo, and issue_number must be provided and valid",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo", "issue_number"]},
+        )
+
+    per_page = min(100, max(1, per_page))
+
+    results = _github_api_request(
+        oauth_token=token_data["token"],
+        method="GET",
+        path=f"/repos/{owner}/{repo}/issues/{issue_number}/comments",
+        params={
+            "page": page,
+            "per_page": per_page,
+        },
+    )
+
+    # Minimal response shape
+    return {
+        "comments": [
+            {
+                "id": comment.get("id"),
+                "body": comment.get("body"),
+                "url": comment.get("html_url"),
+                "user": comment.get("user", {}).get("login"),
+                "created_at": comment.get("created_at"),
+                "updated_at": comment.get("updated_at"),
+            }
+            for comment in results
+        ],
+        "page": page,
+        "per_page": per_page,
+    }
+
+
 def list_org_repositories_by_contributor(
     oauth_token: GitHubTokenData | str,
     org: str,

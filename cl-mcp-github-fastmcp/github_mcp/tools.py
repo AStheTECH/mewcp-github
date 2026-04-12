@@ -11,6 +11,8 @@ from .service import (
     GitHubServiceError,
     get_file_contents,
     get_commit,
+    get_issue,
+    get_issue_comments,
     get_repo as get_repo_service,
     list_branches,
     list_commits,
@@ -678,6 +680,158 @@ def register_tools(mcp: FastMCP) -> None:
                     "search_issues",
                     code="INTERNAL_ERROR",
                     message="Unexpected error while searching issues.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="get_issue",
+        description="Get detailed information about a specific GitHub issue including title, body, state, labels, assignees, and timestamps.",
+    )
+    def get_issue_tool(
+        oauth_token: GitHubTokenData = Field(
+            ...,
+            description="GitHub personal access token or OAuth token (with repo or public_repo scope)",
+        ),
+        owner: str = Field(
+            ..., description="Repository owner name. Example: 'github'."
+        ),
+        repo: str = Field(
+            ..., description="Repository name. Example: 'github-mcp-server'."
+        ),
+        issue_number: int = Field(
+            ...,
+            description="Issue number (unique identifier for the issue in this repository). Example: 123.",
+        ),
+    ) -> str:
+        try:
+            data = get_issue(oauth_token, owner, repo, issue_number)
+            granted_scopes = oauth_token.get("scopes", [])
+            return json.dumps(
+                success_response(
+                    "get_issue",
+                    data,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["get_issue"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed get_issue for %s/%s#%d: %s",
+                owner,
+                repo,
+                issue_number,
+                exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "get_issue",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed get_issue for %s/%s#%d: %s", owner, repo, issue_number, exc
+            )
+            return json.dumps(
+                error_response(
+                    "get_issue",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while fetching issue details.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="get_issue_comments",
+        description="Get all comments on a GitHub issue with pagination support. Returns comment body, author, creation time, and timestamps.",
+    )
+    def get_issue_comments_tool(
+        oauth_token: GitHubTokenData = Field(
+            ...,
+            description="GitHub personal access token or OAuth token (with repo or public_repo scope)",
+        ),
+        owner: str = Field(
+            ..., description="Repository owner name. Example: 'github'."
+        ),
+        repo: str = Field(
+            ..., description="Repository name. Example: 'github-mcp-server'."
+        ),
+        issue_number: int = Field(
+            ...,
+            description="Issue number (unique identifier for the issue in this repository). Example: 123.",
+        ),
+        page: int = Field(
+            1,
+            description="Page number for pagination. Starts at 1. Use with perPage to browse through comment threads. Default: 1.",
+        ),
+        perPage: int = Field(
+            30,
+            description="Number of comments per page. Range: 1-100. Default: 30. Increase to fetch more comments per request, decrease for smaller payloads.",
+        ),
+    ) -> str:
+        try:
+            data = get_issue_comments(
+                oauth_token, owner, repo, issue_number, page=page, per_page=perPage
+            )
+            granted_scopes = oauth_token.get("scopes", [])
+            return json.dumps(
+                success_response(
+                    "get_issue_comments",
+                    data,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["get_issue_comments"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        },
+                        "pagination": {
+                            "page": page,
+                            "perPage": perPage,
+                        },
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed get_issue_comments for %s/%s#%d: %s",
+                owner,
+                repo,
+                issue_number,
+                exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "get_issue_comments",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed get_issue_comments for %s/%s#%d: %s",
+                owner,
+                repo,
+                issue_number,
+                exc,
+            )
+            return json.dumps(
+                error_response(
+                    "get_issue_comments",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while fetching issue comments.",
                     details={"exception": str(exc)},
                 )
             )

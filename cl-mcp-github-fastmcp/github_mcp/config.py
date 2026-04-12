@@ -13,6 +13,8 @@ TOOL_REQUIRED_SCOPES = {
     "list_commits": ["repo"],
     "get_commit": ["repo"],
     "list_issues": ["repo"],
+    "get_issue": ["repo"],
+    "get_issue_comments": ["repo"],
     "get_file_contents": ["repo"],
     "list_org_repositories_by_contributor": ["repo"],
 }
