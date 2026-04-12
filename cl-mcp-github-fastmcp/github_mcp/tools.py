@@ -25,10 +25,13 @@ from .service import (
     list_commits,
     list_issues,
     list_org_repositories_by_contributor,
+    list_pull_requests,
     list_tags,
+    pull_request_read,
     push_files,
     search_repositories,
     search_code,
+    search_pull_requests,
     search_users,
     search_issues,
     update_issue,
@@ -1700,6 +1703,228 @@ def register_tools(mcp: FastMCP) -> None:
                     "push_files",
                     code="INTERNAL_ERROR",
                     message="Unexpected error while pushing files.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="pull_request_read",
+        description="Get details for a pull request with flexible method options (get, get_files, get_status, get_comments, get_review_comments).",
+    )
+    def pr_read(
+        oauth_token: GitHubTokenData = Field(
+            ..., description="GitHub token with token and optional scopes"
+        ),
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        pull_number: int = Field(..., description="Pull request number"),
+        method: str = Field(
+            "get",
+            description="Which PR data to retrieve: get, get_files, get_status, get_comments, get_review_comments",
+        ),
+        page: int = Field(1, description="Page number for paginated results"),
+        per_page: int = Field(30, description="Results per page for paginated results"),
+    ) -> str:
+        try:
+            result = pull_request_read(
+                oauth_token,
+                owner=owner,
+                repo=repo,
+                pull_number=pull_number,
+                method=method,
+                page=page,
+                per_page=per_page,
+            )
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "pull_request_read",
+                    result,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["pull_request_read"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed pull_request_read for %s/%s#%d: %s",
+                owner,
+                repo,
+                pull_number,
+                exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "pull_request_read",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed pull_request_read for %s/%s#%d: %s",
+                owner,
+                repo,
+                pull_number,
+                exc,
+            )
+            return json.dumps(
+                error_response(
+                    "pull_request_read",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while reading pull request.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="list_pull_requests",
+        description="List pull requests in a GitHub repository with filtering and sorting options.",
+    )
+    def list_prs(
+        oauth_token: GitHubTokenData = Field(
+            ..., description="GitHub token with token and optional scopes"
+        ),
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        state: str = Field("open", description="Filter by state: open, closed, or all"),
+        sort: str = Field(
+            "created",
+            description="Sort by: created, updated, popularity, or long-running",
+        ),
+        direction: str = Field("desc", description="Sort direction: asc or desc"),
+        base: str | None = Field(None, description="Filter by base branch"),
+        head: str | None = Field(
+            None, description="Filter by head branch (user:branch format)"
+        ),
+        page: int = Field(1, description="Page number"),
+        per_page: int = Field(30, description="Results per page"),
+    ) -> str:
+        try:
+            result = list_pull_requests(
+                oauth_token,
+                owner=owner,
+                repo=repo,
+                state=state,
+                sort=sort,
+                direction=direction,
+                base=base,
+                head=head,
+                page=page,
+                per_page=per_page,
+            )
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "list_pull_requests",
+                    result,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["list_pull_requests"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed list_pull_requests for %s/%s: %s", owner, repo, exc.message
+            )
+            return json.dumps(
+                error_response(
+                    "list_pull_requests",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error("Failed list_pull_requests for %s/%s: %s", owner, repo, exc)
+            return json.dumps(
+                error_response(
+                    "list_pull_requests",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while listing pull requests.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="search_pull_requests",
+        description="Search for pull requests across GitHub using search syntax.",
+    )
+    def search_prs(
+        oauth_token: GitHubTokenData = Field(
+            ..., description="GitHub token with token and optional scopes"
+        ),
+        query: str = Field(..., description="Search query using GitHub search syntax"),
+        sort: str = Field(
+            "updated", description="Sort field: updated, created, comments, etc."
+        ),
+        order: str = Field("desc", description="Sort order: asc or desc"),
+        owner: str | None = Field(
+            None, description="Repository owner (optional with repo)"
+        ),
+        repo: str | None = Field(
+            None, description="Repository name (optional with owner)"
+        ),
+        page: int = Field(1, description="Page number"),
+        per_page: int = Field(30, description="Results per page"),
+    ) -> str:
+        try:
+            result = search_pull_requests(
+                oauth_token,
+                query=query,
+                sort=sort,
+                order=order,
+                owner=owner,
+                repo=repo,
+                page=page,
+                per_page=per_page,
+            )
+            granted_scopes = oauth_token.scopes
+            return json.dumps(
+                success_response(
+                    "search_pull_requests",
+                    result,
+                    meta={
+                        "scope_check": {
+                            "required": TOOL_REQUIRED_SCOPES["search_pull_requests"],
+                            "granted": granted_scopes,
+                            "passed": True,
+                        }
+                    },
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error("Failed search_pull_requests: %s", exc.message)
+            return json.dumps(
+                error_response(
+                    "search_pull_requests",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error("Failed search_pull_requests: %s", exc)
+            return json.dumps(
+                error_response(
+                    "search_pull_requests",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while searching pull requests.",
                     details={"exception": str(exc)},
                 )
             )

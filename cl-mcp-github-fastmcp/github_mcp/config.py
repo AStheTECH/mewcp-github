@@ -27,6 +27,9 @@ TOOL_REQUIRED_SCOPES = {
     "fork_repository": ["repo"],
     "create_branch": ["repo"],
     "push_files": ["repo"],
+    "pull_request_read": ["repo"],
+    "list_pull_requests": ["repo"],
+    "search_pull_requests": ["repo"],
 }
 
 

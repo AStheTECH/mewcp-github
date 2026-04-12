@@ -1237,7 +1237,7 @@ def add_issue_comment(
 
 
 def update_issue(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     issue_number: int,
@@ -1322,8 +1322,406 @@ def update_issue(
     }
 
 
+def pull_request_read(
+    oauth_token: GitHubTokenData,
+    owner: str,
+    repo: str,
+    pull_number: int,
+    method: str = "get",
+    page: int = 1,
+    per_page: int = 30,
+) -> dict[str, Any]:
+    """Read pull request data with flexible method parameter.
+    
+    Methods:
+    - get: Get details of the pull request
+    - get_files: Get list of files changed in the PR
+    - get_status: Get combined commit status and check runs
+    - get_comments: Get PR comments (not review comments)
+    - get_review_comments: Get review thread comments
+    
+    Args:
+        oauth_token: GitHub token
+        owner: Repository owner
+        repo: Repository name
+        pull_number: Pull request number
+        method: Which data to retrieve (default: 'get')
+        page: Page number for pagination
+        per_page: Results per page
+    
+    Returns:
+        Dictionary with PR data based on method
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not owner or not repo or pull_number <= 0:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner, repo, and pull_number are required and valid",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo", "pull_number"]},
+        )
+
+    if method == "get":
+        # Get PR details
+        result = _github_api_request(
+            oauth_token=oauth_token,
+            method="GET",
+            path=f"/repos/{owner}/{repo}/pulls/{pull_number}",
+            required_scopes=required_scopes,
+        )
+        
+        return {
+            "number": result.get("number"),
+            "title": result.get("title"),
+            "body": result.get("body"),
+            "state": result.get("state"),
+            "state_reason": result.get("state_reason"),
+            "url": result.get("html_url"),
+            "user": result.get("user", {}).get("login"),
+            "created_at": result.get("created_at"),
+            "updated_at": result.get("updated_at"),
+            "merged_at": result.get("merged_at"),
+            "merged": result.get("merged", False),
+            "merge_commit_sha": result.get("merge_commit_sha"),
+            "head": {
+                "ref": result.get("head", {}).get("ref"),
+                "sha": result.get("head", {}).get("sha"),
+                "repo": result.get("head", {}).get("repo", {}).get("full_name"),
+            },
+            "base": {
+                "ref": result.get("base", {}).get("ref"),
+                "sha": result.get("base", {}).get("sha"),
+                "repo": result.get("base", {}).get("repo", {}).get("full_name"),
+            },
+            "draft": result.get("draft", False),
+            "additions": result.get("additions", 0),
+            "deletions": result.get("deletions", 0),
+            "changed_files": result.get("changed_files", 0),
+            "commits": result.get("commits", 0),
+            "labels": [l.get("name") for l in result.get("labels", [])],
+            "assignees": [a.get("login") for a in result.get("assignees", [])],
+            "reviewers": [r.get("login") for r in result.get("requested_reviewers", [])],
+        }
+
+    elif method == "get_files":
+        # Get files changed in PR
+        per_page = min(100, max(1, per_page))
+        results = _github_api_request(
+            oauth_token=oauth_token,
+            method="GET",
+            path=f"/repos/{owner}/{repo}/pulls/{pull_number}/files",
+            params={"page": page, "per_page": per_page},
+            required_scopes=required_scopes,
+        )
+        
+        files = []
+        for file_item in results if isinstance(results, list) else []:
+            files.append({
+                "filename": file_item.get("filename"),
+                "status": file_item.get("status"),
+                "additions": file_item.get("additions"),
+                "deletions": file_item.get("deletions"),
+                "changes": file_item.get("changes"),
+                "patch": file_item.get("patch"),
+                "previous_filename": file_item.get("previous_filename"),
+            })
+        
+        return {
+            "files": files,
+            "total_files": len(files),
+            "page": page,
+            "per_page": per_page,
+        }
+
+    elif method == "get_status":
+        # Get PR status and checks
+        status_result = _github_api_request(
+            oauth_token=oauth_token,
+            method="GET",
+            path=f"/repos/{owner}/{repo}/pulls/{pull_number}",
+            required_scopes=required_scopes,
+        )
+        
+        head_sha = status_result.get("head", {}).get("sha")
+        if not head_sha:
+            raise GitHubServiceError(
+                code="NOT_FOUND",
+                message="Could not determine head commit SHA for PR",
+                http_status=404,
+            )
+        
+        # Get combined status
+        combined = _github_api_request(
+            oauth_token=oauth_token,
+            method="GET",
+            path=f"/repos/{owner}/{repo}/commits/{head_sha}/status",
+            required_scopes=required_scopes,
+        )
+        
+        return {
+            "state": combined.get("state"),
+            "sha": combined.get("sha"),
+            "total_count": combined.get("total_count", 0),
+            "statuses": [
+                {
+                    "state": s.get("state"),
+                    "context": s.get("context"),
+                    "description": s.get("description"),
+                    "target_url": s.get("target_url"),
+                    "created_at": s.get("created_at"),
+                }
+                for s in combined.get("statuses", [])
+            ],
+        }
+
+    elif method == "get_comments":
+        # Get PR comments
+        per_page = min(100, max(1, per_page))
+        results = _github_api_request(
+            oauth_token=oauth_token,
+            method="GET",
+            path=f"/repos/{owner}/{repo}/issues/{pull_number}/comments",
+            params={"page": page, "per_page": per_page},
+            required_scopes=required_scopes,
+        )
+        
+        comments = []
+        for comment in results if isinstance(results, list) else []:
+            comments.append({
+                "id": comment.get("id"),
+                "user": comment.get("user", {}).get("login"),
+                "body": comment.get("body"),
+                "created_at": comment.get("created_at"),
+                "updated_at": comment.get("updated_at"),
+                "url": comment.get("html_url"),
+            })
+        
+        return {
+            "comments": comments,
+            "total_comments": len(comments),
+            "page": page,
+            "per_page": per_page,
+        }
+
+    elif method == "get_review_comments":
+        # Get review comments on PR
+        per_page = min(100, max(1, per_page))
+        results = _github_api_request(
+            oauth_token=oauth_token,
+            method="GET",
+            path=f"/repos/{owner}/{repo}/pulls/{pull_number}/comments",
+            params={"page": page, "per_page": per_page},
+            required_scopes=required_scopes,
+        )
+        
+        comments = []
+        for comment in results if isinstance(results, list) else []:
+            comments.append({
+                "id": comment.get("id"),
+                "user": comment.get("user", {}).get("login"),
+                "body": comment.get("body"),
+                "path": comment.get("path"),
+                "position": comment.get("position"),
+                "commit_id": comment.get("commit_id"),
+                "created_at": comment.get("created_at"),
+                "updated_at": comment.get("updated_at"),
+                "url": comment.get("html_url"),
+            })
+        
+        return {
+            "review_comments": comments,
+            "total_review_comments": len(comments),
+            "page": page,
+            "per_page": per_page,
+        }
+
+    else:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message=f"Unknown method: {method}",
+            http_status=400,
+            details={"method": method, "valid_methods": ["get", "get_files", "get_status", "get_comments", "get_review_comments"]},
+        )
+
+
+def list_pull_requests(
+    oauth_token: GitHubTokenData,
+    owner: str,
+    repo: str,
+    state: str = "open",
+    sort: str = "created",
+    direction: str = "desc",
+    base: str | None = None,
+    head: str | None = None,
+    page: int = 1,
+    per_page: int = 30,
+) -> dict[str, Any]:
+    """List pull requests in a repository.
+    
+    Args:
+        oauth_token: GitHub token
+        owner: Repository owner
+        repo: Repository name
+        state: Pull request state filter ('open', 'closed', 'all')
+        sort: Sort field ('created', 'updated', 'popularity', 'long-running')
+        direction: Sort direction ('asc', 'desc')
+        base: Filter by base branch
+        head: Filter by head branch (user:branch format)
+        page: Page number
+        per_page: Results per page
+    
+    Returns:
+        Dictionary with PRs list
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not owner or not repo:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="owner and repo are required",
+            http_status=400,
+            retryable=False,
+            details={"fields": ["owner", "repo"]},
+        )
+
+    params = {
+        "state": state,
+        "sort": sort,
+        "direction": direction,
+        "page": page,
+        "per_page": min(100, max(1, per_page)),
+    }
+    
+    if base:
+        params["base"] = base
+    if head:
+        params["head"] = head
+
+    results = _github_api_request(
+        oauth_token=oauth_token,
+        method="GET",
+        path=f"/repos/{owner}/{repo}/pulls",
+        params=params,
+        required_scopes=required_scopes,
+    )
+
+    prs = []
+    for pr in results if isinstance(results, list) else []:
+        prs.append({
+            "number": pr.get("number"),
+            "title": pr.get("title"),
+            "state": pr.get("state"),
+            "url": pr.get("html_url"),
+            "user": pr.get("user", {}).get("login"),
+            "created_at": pr.get("created_at"),
+            "updated_at": pr.get("updated_at"),
+            "draft": pr.get("draft", False),
+            "additions": pr.get("additions", 0),
+            "deletions": pr.get("deletions", 0),
+            "changed_files": pr.get("changed_files", 0),
+        })
+
+    return {
+        "pull_requests": prs,
+        "total_count": len(prs),
+        "page": page,
+        "per_page": params["per_page"],
+    }
+
+
+def search_pull_requests(
+    oauth_token: GitHubTokenData,
+    query: str,
+    sort: str = "updated",
+    order: str = "desc",
+    owner: str | None = None,
+    repo: str | None = None,
+    page: int = 1,
+    per_page: int = 30,
+) -> dict[str, Any]:
+    """Search pull requests across GitHub repositories.
+    
+    Args:
+        oauth_token: GitHub token
+        query: Search query using GitHub search syntax
+        sort: Sort field (default: 'updated')
+        order: Sort order ('asc', 'desc')
+        owner: Repository owner (optional)
+        repo: Repository name (optional)
+        page: Page number
+        per_page: Results per page
+    
+    Returns:
+        Dictionary with search results
+    """
+    token_data = get_token_data(oauth_token)
+    required_scopes = ["repo"]
+    _validate_required_scopes(token_data["scopes"], required_scopes)
+
+    if not query.strip():
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="Search query cannot be empty",
+            http_status=400,
+            retryable=False,
+            details={"field": "query"},
+        )
+
+    # Preprocess query - add is:pr if not present
+    search_query = query
+    if "is:pr" not in search_query.lower():
+        search_query = f"is:pr {search_query}"
+
+    # Add repo filter if provided
+    if owner and repo and "repo:" not in search_query.lower():
+        search_query = f"repo:{owner}/{repo} {search_query}"
+
+    per_page = min(100, max(1, per_page))
+
+    results = _github_api_request(
+        oauth_token=oauth_token,
+        method="GET",
+        path="/search/issues",
+        params={
+            "q": search_query,
+            "sort": sort,
+            "order": order,
+            "page": page,
+            "per_page": per_page,
+        },
+        required_scopes=required_scopes,
+    )
+
+    prs = []
+    for item in results.get("items", []):
+        prs.append({
+            "number": item.get("number"),
+            "title": item.get("title"),
+            "state": item.get("state"),
+            "url": item.get("html_url"),
+            "user": item.get("user", {}).get("login"),
+            "created_at": item.get("created_at"),
+            "updated_at": item.get("updated_at"),
+            "comments": item.get("comments", 0),
+        })
+
+    return {
+        "total_count": results.get("total_count", 0),
+        "incomplete_results": results.get("incomplete_results", False),
+        "pull_requests": prs,
+        "page": page,
+        "per_page": per_page,
+    }
+
+
 def list_org_repositories_by_contributor(
-    oauth_token: GitHubTokenData | str,
+    oauth_token: GitHubTokenData,
     org: str,
     contributor_usernames: str | list[str],
     repo_type: str = "all",
