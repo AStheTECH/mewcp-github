@@ -8,3 +8,4 @@ oauth_script
 /oauth_script.py
 .github
 /.github/*
+env

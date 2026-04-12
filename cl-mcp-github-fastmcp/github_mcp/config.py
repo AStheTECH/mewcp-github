@@ -2,6 +2,18 @@ import logging
 
 GITHUB_API_BASE = "https://api.github.com"
 
+TOOL_REQUIRED_SCOPES = {
+    "ping": [],
+    "get_repo": ["repo"],
+    "list_branches": ["repo"],
+    "search_repositories": ["repo"],
+    "list_commits": ["repo"],
+    "get_commit": ["repo"],
+    "list_issues": ["repo"],
+    "get_file_contents": ["repo"],
+    "list_org_repositories_by_contributor": ["repo"],
+}
+
 
 def configure_logging() -> None:
     logging.basicConfig(
