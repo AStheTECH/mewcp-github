@@ -3,7 +3,6 @@ import logging
 GITHUB_API_BASE = "https://api.github.com"
 
 TOOL_REQUIRED_SCOPES = {
-    "ping": [],
     "get_repo": ["repo"],
     "list_branches": ["repo"],
     "search_repositories": ["repo"],
@@ -36,7 +35,6 @@ TOOL_REQUIRED_SCOPES = {
     "update_pull_request_branch": ["repo"],
     "pull_request_review_write": ["repo"],
     "add_reply_to_pull_request_comment": ["repo"],
-    # Phase 2 Tools
     "get_latest_release": ["repo"],
     "list_releases": ["repo"],
     "get_release_by_tag": ["repo"],
@@ -44,6 +42,7 @@ TOOL_REQUIRED_SCOPES = {
     "get_me": [],
     "sub_issue_write": ["repo"],
     "assign_copilot_to_issue": ["repo"],
+    "request_copilot_review": ["repo"],
 }
 
 
