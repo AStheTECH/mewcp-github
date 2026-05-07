@@ -5,9 +5,9 @@ import time
 from typing import Any
 
 import httpx
+from fastmcp_credentials import get_credentials
 
 from .config import GITHUB_API_BASE
-from .schemas import GitHubTokenData
 
 
 class GitHubServiceError(Exception):
@@ -27,13 +27,6 @@ class GitHubServiceError(Exception):
         self.retryable = retryable
         self.details = details or {}
 
-
-def get_token_data(oauth_token: GitHubTokenData) -> dict[str, Any]:
-    """Extract token and scopes from GitHubTokenData"""
-    return {
-        "token": oauth_token.token,
-        "scopes": oauth_token.scopes,  # Pydantic default ["repo"] already applied
-    }
 
 
 def _validate_required_scopes(
@@ -70,25 +63,21 @@ def _validate_required_scopes(
 
 def _github_api_request(
     *,
-    oauth_token: GitHubTokenData,
     method: str,
     path: str,
     params: dict[str, Any] | None = None,
     json_body: dict[str, Any] | None = None,
     required_scopes: list[str] | None = None,
 ) -> Any:
-    token_data = get_token_data(oauth_token)
-    token = token_data.get("token")
-    granted_scopes = token_data.get("scopes", [])
+    cred = get_credentials()
+    token = cred.access_token
 
     if not token:
         raise GitHubServiceError(
             code="AUTH_MISSING",
-            message="Missing token in oauth_token input.",
+            message="Missing GitHub token in credentials.",
             http_status=401,
         )
-
-    _validate_required_scopes(granted_scopes, required_scopes or [])
 
     headers = {
         "Accept": "application/vnd.github+json",
@@ -153,10 +142,9 @@ def _github_api_request(
 #################### Service Methods ####################
 
 
-def get_repo(oauth_token: GitHubTokenData, owner: str, repo: str) -> dict[str, Any]:
+def get_repo(owner: str, repo: str) -> dict[str, Any]:
     """Get detailed repository information (get_repository enhanced version)."""
     payload = _github_api_request(
-        oauth_token=oauth_token,
         method="GET",
         path=f"/repos/{owner}/{repo}",
         required_scopes=["repo"],
@@ -190,7 +178,6 @@ def get_repo(oauth_token: GitHubTokenData, owner: str, repo: str) -> dict[str, A
 
 
 def list_tags(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     page: int = 1,
@@ -198,7 +185,6 @@ def list_tags(
 ) -> dict[str, Any]:
     """List repository tags with pagination."""
     payload = _github_api_request(
-        oauth_token=oauth_token,
         method="GET",
         path=f"/repos/{owner}/{repo}/tags",
         params={"page": page, "per_page": per_page},
@@ -224,14 +210,12 @@ def list_tags(
 
 
 def get_tag(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     tag: str,
 ) -> dict[str, Any]:
     """Get specific tag details."""
     payload = _github_api_request(
-        oauth_token=oauth_token,
         method="GET",
         path=f"/repos/{owner}/{repo}/git/refs/tags/{tag}",
         required_scopes=["repo"],
@@ -246,7 +230,6 @@ def get_tag(
 
 
 def create_repository(
-    oauth_token: GitHubTokenData,
     name: str,
     description: str | None = None,
     private: bool = False,
@@ -270,7 +253,6 @@ def create_repository(
         request_body["gitignore_template"] = gitignore_template
 
     payload = _github_api_request(
-        oauth_token=oauth_token,
         method="POST",
         path=path,
         json_body=request_body,
@@ -290,7 +272,6 @@ def create_repository(
 
 
 def create_or_update_file(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     path: str,
@@ -311,7 +292,6 @@ def create_or_update_file(
         request_body["sha"] = sha
 
     payload = _github_api_request(
-        oauth_token=oauth_token,
         method="PUT",
         path=f"/repos/{owner}/{repo}/contents/{path}",
         json_body=request_body,
@@ -325,7 +305,6 @@ def create_or_update_file(
 
 
 def fork_repository(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     org: str | None = None,
@@ -336,7 +315,6 @@ def fork_repository(
         request_body["organization"] = org
 
     payload = _github_api_request(
-        oauth_token=oauth_token,
         method="POST",
         path=f"/repos/{owner}/{repo}/forks",
         json_body=request_body,
@@ -355,7 +333,6 @@ def fork_repository(
 
 
 def create_branch(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     branch_name: str,
@@ -364,10 +341,9 @@ def create_branch(
     """Create a new branch in the repository."""
     if not sha:
         # Get default branch SHA if not provided
-        repo_data = get_repo(oauth_token, owner, repo)
+        repo_data = get_repo(owner, repo)
         default_branch = repo_data.get("default_branch", "main")
         ref_payload = _github_api_request(
-            oauth_token=oauth_token,
             method="GET",
             path=f"/repos/{owner}/{repo}/git/refs/heads/{default_branch}",
             required_scopes=["repo"],
@@ -380,7 +356,6 @@ def create_branch(
     }
 
     payload = _github_api_request(
-        oauth_token=oauth_token,
         method="POST",
         path=f"/repos/{owner}/{repo}/git/refs",
         json_body=request_body,
@@ -396,7 +371,6 @@ def create_branch(
 
 
 def push_files(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     files: list[dict[str, str]],
@@ -407,13 +381,12 @@ def push_files(
 ) -> dict[str, Any]:
     """Push multiple files in a single atomic commit."""
     if not branch:
-        repo_data = get_repo(oauth_token, owner, repo)
+        repo_data = get_repo(owner, repo)
         branch = repo_data.get("default_branch", "main")
 
     # Get current branch reference
     try:
         ref_payload = _github_api_request(
-            oauth_token=oauth_token,
             method="GET",
             path=f"/repos/{owner}/{repo}/git/refs/heads/{branch}",
             required_scopes=["repo"],
@@ -427,7 +400,6 @@ def push_files(
     parent_tree_sha = None
     if parent_sha:
         commit_payload = _github_api_request(
-            oauth_token=oauth_token,
             method="GET",
             path=f"/repos/{owner}/{repo}/git/commits/{parent_sha}",
             required_scopes=["repo"],
@@ -439,7 +411,6 @@ def push_files(
     for file_item in files:
         content = file_item.get("content", "")
         path = file_item.get("path", "")
-        encoded_content = base64.b64encode(content.encode()).decode()
         tree_items.append(
             {
                 "path": path,
@@ -454,7 +425,6 @@ def push_files(
         tree_request["base_tree"] = parent_tree_sha
 
     tree_payload = _github_api_request(
-        oauth_token=oauth_token,
         method="POST",
         path=f"/repos/{owner}/{repo}/git/trees",
         json_body=tree_request,
@@ -477,7 +447,6 @@ def push_files(
         }
 
     commit_payload = _github_api_request(
-        oauth_token=oauth_token,
         method="POST",
         path=f"/repos/{owner}/{repo}/git/commits",
         json_body=commit_request,
@@ -489,7 +458,6 @@ def push_files(
     update_request = {"sha": new_commit_sha, "force": False}
 
     ref_payload = _github_api_request(
-        oauth_token=oauth_token,
         method="PATCH",
         path=f"/repos/{owner}/{repo}/git/refs/heads/{branch}",
         json_body=update_request,
@@ -506,14 +474,12 @@ def push_files(
 
 
 def list_branches(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     page: int = 1,
     per_page: int = 30,
 ) -> list[dict[str, Any]]:
     payload = _github_api_request(
-        oauth_token=oauth_token,
         method="GET",
         path=f"/repos/{owner}/{repo}/branches",
         params={"page": page, "per_page": per_page},
@@ -535,7 +501,6 @@ def list_branches(
 
 
 def search_repositories(
-    oauth_token: GitHubTokenData,
     query: str,
     sort: str = "stars",
     order: str = "desc",
@@ -552,7 +517,6 @@ def search_repositories(
     }
 
     payload = _github_api_request(
-        oauth_token=oauth_token,
         method="GET",
         path="/search/repositories",
         params=params,
@@ -580,7 +544,6 @@ def search_repositories(
 
 
 def list_commits(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     sha: str | None = None,
@@ -608,7 +571,6 @@ def list_commits(
         params["until"] = until
 
     payload = _github_api_request(
-        oauth_token=oauth_token,
         method="GET",
         path=f"/repos/{owner}/{repo}/commits",
         params=params,
@@ -643,7 +605,6 @@ def list_commits(
 
 
 def get_commit(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     sha: str,
@@ -651,7 +612,6 @@ def get_commit(
 ) -> dict[str, Any]:
     """Get details of a specific commit."""
     payload = _github_api_request(
-        oauth_token=oauth_token,
         method="GET",
         path=f"/repos/{owner}/{repo}/commits/{sha}",
         required_scopes=["repo"],
@@ -695,7 +655,6 @@ def get_commit(
 
 
 def list_issues(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     state: str = "open",
@@ -713,7 +672,6 @@ def list_issues(
         params["labels"] = labels
 
     payload = _github_api_request(
-        oauth_token=oauth_token,
         method="GET",
         path=f"/repos/{owner}/{repo}/issues",
         params=params,
@@ -730,7 +688,7 @@ def list_issues(
                 "url": issue.get("html_url"),
                 "body": issue.get("body"),
                 "user": issue.get("user", {}).get("login"),
-                "labels": [l.get("name") for l in issue.get("labels", [])],
+                "labels": [label.get("name") for label in issue.get("labels", [])],
                 "created_at": issue.get("created_at"),
                 "updated_at": issue.get("updated_at"),
             }
@@ -743,7 +701,6 @@ def list_issues(
 
 
 def get_file_contents(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     path: str = "/",
@@ -755,7 +712,6 @@ def get_file_contents(
         params["ref"] = ref
 
     payload = _github_api_request(
-        oauth_token=oauth_token,
         method="GET",
         path=f"/repos/{owner}/{repo}/contents{path}",
         params=params,
@@ -793,7 +749,6 @@ def get_file_contents(
 
 
 def search_code(
-    oauth_token: GitHubTokenData,
     query: str,
     sort: str = "indexed",
     order: str = "desc",
@@ -803,7 +758,6 @@ def search_code(
     """Search code across GitHub repositories.
 
     Args:
-        oauth_token: GitHub personal access token or OAuth token
         query: Code search query (e.g., 'fmt.Println language:go')
         sort: Sort field (default: 'indexed')
         order: Sort order ('asc' or 'desc', default: 'desc')
@@ -813,10 +767,6 @@ def search_code(
     Returns:
         Dictionary with search results
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not query.strip():
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -829,7 +779,6 @@ def search_code(
     per_page = min(100, max(1, per_page))
 
     results = _github_api_request(
-        oauth_token=token_data["token"],
         method="GET",
         path="/search/code",
         params={
@@ -857,7 +806,6 @@ def search_code(
 
 
 def search_users(
-    oauth_token: GitHubTokenData,
     query: str,
     sort: str = "followers",
     order: str = "desc",
@@ -867,7 +815,6 @@ def search_users(
     """Search GitHub users.
 
     Args:
-        oauth_token: GitHub personal access token or OAuth token
         query: User search query (e.g., 'john smith', 'location:seattle')
         sort: Sort field ('followers', 'repositories', 'joined', default: 'followers')
         order: Sort order ('asc' or 'desc', default: 'desc')
@@ -877,10 +824,6 @@ def search_users(
     Returns:
         Dictionary with search results
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not query.strip():
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -898,7 +841,6 @@ def search_users(
     per_page = min(100, max(1, per_page))
 
     results = _github_api_request(
-        oauth_token=token_data["token"],
         method="GET",
         path="/search/users",
         params={
@@ -926,7 +868,6 @@ def search_users(
 
 
 def search_issues(
-    oauth_token: GitHubTokenData,
     query: str,
     sort: str = "updated",
     order: str = "desc",
@@ -938,7 +879,6 @@ def search_issues(
     """Search issues across GitHub repositories.
 
     Args:
-        oauth_token: GitHub personal access token or OAuth token
         query: Issue search query
         sort: Sort field (default: 'updated')
         order: Sort order ('asc' or 'desc', default: 'desc')
@@ -950,10 +890,6 @@ def search_issues(
     Returns:
         Dictionary with search results
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not query.strip():
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -977,7 +913,6 @@ def search_issues(
     per_page = min(100, max(1, per_page))
 
     results = _github_api_request(
-        oauth_token=token_data["token"],
         method="GET",
         path="/search/issues",
         params={
@@ -1008,7 +943,6 @@ def search_issues(
 
 
 def get_issue(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     issue_number: int,
@@ -1016,7 +950,6 @@ def get_issue(
     """Get a single GitHub issue by number.
 
     Args:
-        oauth_token: GitHub personal access token or OAuth token
         owner: Repository owner
         repo: Repository name
         issue_number: Issue number
@@ -1024,10 +957,6 @@ def get_issue(
     Returns:
         Dictionary with issue data
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo", "public_repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not owner or not repo or issue_number <= 0:
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -1038,7 +967,6 @@ def get_issue(
         )
 
     result = _github_api_request(
-        oauth_token=token_data["token"],
         method="GET",
         path=f"/repos/{owner}/{repo}/issues/{issue_number}",
         params={},
@@ -1061,7 +989,6 @@ def get_issue(
 
 
 def get_issue_comments(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     issue_number: int,
@@ -1071,7 +998,6 @@ def get_issue_comments(
     """Get comments on a GitHub issue.
 
     Args:
-        oauth_token: GitHub personal access token or OAuth token
         owner: Repository owner
         repo: Repository name
         issue_number: Issue number
@@ -1081,10 +1007,6 @@ def get_issue_comments(
     Returns:
         Dictionary with comments data
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo", "public_repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not owner or not repo or issue_number <= 0:
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -1097,7 +1019,6 @@ def get_issue_comments(
     per_page = min(100, max(1, per_page))
 
     results = _github_api_request(
-        oauth_token=token_data["token"],
         method="GET",
         path=f"/repos/{owner}/{repo}/issues/{issue_number}/comments",
         params={
@@ -1124,7 +1045,6 @@ def get_issue_comments(
 
 
 def create_issue(
-    oauth_token: GitHubTokenData | str,
     owner: str,
     repo: str,
     title: str,
@@ -1136,7 +1056,6 @@ def create_issue(
     """Create a new issue in a GitHub repository.
 
     Args:
-        oauth_token: GitHub personal access token or OAuth token
         owner: Repository owner
         repo: Repository name
         title: Issue title (required)
@@ -1148,10 +1067,6 @@ def create_issue(
     Returns:
         Dictionary with issue ID and URL
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not owner or not repo or not title:
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -1174,7 +1089,6 @@ def create_issue(
         request_body["milestone"] = milestone
 
     result = _github_api_request(
-        oauth_token=token_data["token"],
         method="POST",
         path=f"/repos/{owner}/{repo}/issues",
         json_body=request_body,
@@ -1190,7 +1104,6 @@ def create_issue(
 
 
 def add_issue_comment(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     issue_number: int,
@@ -1199,7 +1112,6 @@ def add_issue_comment(
     """Add a comment to a GitHub issue or pull request.
 
     Args:
-        oauth_token: GitHub personal access token or OAuth token
         owner: Repository owner
         repo: Repository name
         issue_number: Issue or PR number
@@ -1208,10 +1120,6 @@ def add_issue_comment(
     Returns:
         Dictionary with comment ID and URL
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not owner or not repo or issue_number <= 0 or not body:
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -1224,7 +1132,6 @@ def add_issue_comment(
     request_body = {"body": body}
 
     result = _github_api_request(
-        oauth_token=token_data["token"],
         method="POST",
         path=f"/repos/{owner}/{repo}/issues/{issue_number}/comments",
         json_body=request_body,
@@ -1240,7 +1147,6 @@ def add_issue_comment(
 
 
 def update_issue(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     issue_number: int,
@@ -1255,7 +1161,6 @@ def update_issue(
     """Update a GitHub issue.
 
     Args:
-        oauth_token: GitHub personal access token or OAuth token
         owner: Repository owner
         repo: Repository name
         issue_number: Issue number (required)
@@ -1270,10 +1175,6 @@ def update_issue(
     Returns:
         Dictionary with issue ID and URL
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not owner or not repo or issue_number <= 0:
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -1309,7 +1210,6 @@ def update_issue(
         )
 
     result = _github_api_request(
-        oauth_token=token_data["token"],
         method="PATCH",
         path=f"/repos/{owner}/{repo}/issues/{issue_number}",
         json_body=request_body,
@@ -1326,7 +1226,6 @@ def update_issue(
 
 
 def pull_request_read(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     pull_number: int,
@@ -1344,7 +1243,6 @@ def pull_request_read(
     - get_review_comments: Get review thread comments
 
     Args:
-        oauth_token: GitHub token
         owner: Repository owner
         repo: Repository name
         pull_number: Pull request number
@@ -1355,10 +1253,6 @@ def pull_request_read(
     Returns:
         Dictionary with PR data based on method
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not owner or not repo or pull_number <= 0:
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -1371,10 +1265,8 @@ def pull_request_read(
     if method == "get":
         # Get PR details
         result = _github_api_request(
-            oauth_token=oauth_token,
             method="GET",
             path=f"/repos/{owner}/{repo}/pulls/{pull_number}",
-            required_scopes=required_scopes,
         )
 
         return {
@@ -1405,7 +1297,7 @@ def pull_request_read(
             "deletions": result.get("deletions", 0),
             "changed_files": result.get("changed_files", 0),
             "commits": result.get("commits", 0),
-            "labels": [l.get("name") for l in result.get("labels", [])],
+            "labels": [label.get("name") for label in result.get("labels", [])],
             "assignees": [a.get("login") for a in result.get("assignees", [])],
             "reviewers": [
                 r.get("login") for r in result.get("requested_reviewers", [])
@@ -1416,11 +1308,9 @@ def pull_request_read(
         # Get files changed in PR
         per_page = min(100, max(1, per_page))
         results = _github_api_request(
-            oauth_token=oauth_token,
             method="GET",
             path=f"/repos/{owner}/{repo}/pulls/{pull_number}/files",
             params={"page": page, "per_page": per_page},
-            required_scopes=required_scopes,
         )
 
         files = []
@@ -1447,10 +1337,8 @@ def pull_request_read(
     elif method == "get_status":
         # Get PR status and checks
         status_result = _github_api_request(
-            oauth_token=oauth_token,
             method="GET",
             path=f"/repos/{owner}/{repo}/pulls/{pull_number}",
-            required_scopes=required_scopes,
         )
 
         head_sha = status_result.get("head", {}).get("sha")
@@ -1463,10 +1351,8 @@ def pull_request_read(
 
         # Get combined status
         combined = _github_api_request(
-            oauth_token=oauth_token,
             method="GET",
             path=f"/repos/{owner}/{repo}/commits/{head_sha}/status",
-            required_scopes=required_scopes,
         )
 
         return {
@@ -1489,11 +1375,9 @@ def pull_request_read(
         # Get PR comments
         per_page = min(100, max(1, per_page))
         results = _github_api_request(
-            oauth_token=oauth_token,
             method="GET",
             path=f"/repos/{owner}/{repo}/issues/{pull_number}/comments",
             params={"page": page, "per_page": per_page},
-            required_scopes=required_scopes,
         )
 
         comments = []
@@ -1520,11 +1404,9 @@ def pull_request_read(
         # Get review comments on PR
         per_page = min(100, max(1, per_page))
         results = _github_api_request(
-            oauth_token=oauth_token,
             method="GET",
             path=f"/repos/{owner}/{repo}/pulls/{pull_number}/comments",
             params={"page": page, "per_page": per_page},
-            required_scopes=required_scopes,
         )
 
         comments = []
@@ -1569,7 +1451,6 @@ def pull_request_read(
 
 
 def list_pull_requests(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     state: str = "open",
@@ -1583,7 +1464,6 @@ def list_pull_requests(
     """List pull requests in a repository.
 
     Args:
-        oauth_token: GitHub token
         owner: Repository owner
         repo: Repository name
         state: Pull request state filter ('open', 'closed', 'all')
@@ -1597,10 +1477,6 @@ def list_pull_requests(
     Returns:
         Dictionary with PRs list
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not owner or not repo:
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -1624,11 +1500,9 @@ def list_pull_requests(
         params["head"] = head
 
     results = _github_api_request(
-        oauth_token=oauth_token,
         method="GET",
         path=f"/repos/{owner}/{repo}/pulls",
         params=params,
-        required_scopes=required_scopes,
     )
 
     prs = []
@@ -1658,7 +1532,6 @@ def list_pull_requests(
 
 
 def search_pull_requests(
-    oauth_token: GitHubTokenData,
     query: str,
     sort: str = "updated",
     order: str = "desc",
@@ -1670,7 +1543,6 @@ def search_pull_requests(
     """Search pull requests across GitHub repositories.
 
     Args:
-        oauth_token: GitHub token
         query: Search query using GitHub search syntax
         sort: Sort field (default: 'updated')
         order: Sort order ('asc', 'desc')
@@ -1682,10 +1554,6 @@ def search_pull_requests(
     Returns:
         Dictionary with search results
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not query.strip():
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -1707,7 +1575,6 @@ def search_pull_requests(
     per_page = min(100, max(1, per_page))
 
     results = _github_api_request(
-        oauth_token=oauth_token,
         method="GET",
         path="/search/issues",
         params={
@@ -1717,7 +1584,6 @@ def search_pull_requests(
             "page": page,
             "per_page": per_page,
         },
-        required_scopes=required_scopes,
     )
 
     prs = []
@@ -1745,7 +1611,6 @@ def search_pull_requests(
 
 
 def list_org_repositories_by_contributor(
-    oauth_token: GitHubTokenData,
     org: str,
     contributor_usernames: str | list[str],
     repo_type: str = "all",
@@ -1755,7 +1620,6 @@ def list_org_repositories_by_contributor(
     Returns repos with filtered contributors and their individual contribution counts.
 
     Args:
-        oauth_token: GitHub authentication token
         org: Organization name
         contributor_usernames: Single username (str) or list of usernames to filter by
         repo_type: Filter by repo type: "all", "public", or "private" (default: "all")
@@ -1781,11 +1645,9 @@ def list_org_repositories_by_contributor(
         }
 
         org_repos_payload = _github_api_request(
-            oauth_token=oauth_token,
             method="GET",
             path=f"/orgs/{org}/repos",
             params=params,
-            required_scopes=["repo"],
         )
 
         if not org_repos_payload:
@@ -1803,11 +1665,9 @@ def list_org_repositories_by_contributor(
         # Get contributors for this repo
         try:
             contributors_payload = _github_api_request(
-                oauth_token=oauth_token,
                 method="GET",
                 path=f"/repos/{repo_full_name}/contributors",
                 params={"per_page": 100},
-                required_scopes=["repo"],
             )
 
             # Find filtered contributors in this repo
@@ -1852,7 +1712,6 @@ def list_org_repositories_by_contributor(
 
 
 def create_pull_request(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     title: str,
@@ -1865,7 +1724,6 @@ def create_pull_request(
     """Create a new pull request.
 
     Args:
-        oauth_token: GitHub token
         owner: Repository owner
         repo: Repository name
         title: PR title
@@ -1878,10 +1736,6 @@ def create_pull_request(
     Returns:
         Dictionary with PR details
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not all([owner, repo, title, head, base]):
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -1903,11 +1757,9 @@ def create_pull_request(
         request_body["body"] = body
 
     result = _github_api_request(
-        oauth_token=oauth_token,
         method="POST",
         path=f"/repos/{owner}/{repo}/pulls",
         json_body=request_body,
-        required_scopes=required_scopes,
     )
 
     return {
@@ -1924,7 +1776,6 @@ def create_pull_request(
 
 
 def update_pull_request(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     pull_number: int,
@@ -1939,7 +1790,6 @@ def update_pull_request(
     """Update an existing pull request.
 
     Args:
-        oauth_token: GitHub token
         owner: Repository owner
         repo: Repository name
         pull_number: PR number to update
@@ -1954,10 +1804,6 @@ def update_pull_request(
     Returns:
         Dictionary with updated PR details
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not all([owner, repo]) or pull_number <= 0:
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -1991,11 +1837,9 @@ def update_pull_request(
         )
 
     result = _github_api_request(
-        oauth_token=oauth_token,
         method="PATCH",
         path=f"/repos/{owner}/{repo}/pulls/{pull_number}",
         json_body=request_body,
-        required_scopes=required_scopes,
     )
 
     # Update reviewers separately if provided
@@ -2003,11 +1847,9 @@ def update_pull_request(
         reviewer_body = {"reviewers": reviewers}
         try:
             _github_api_request(
-                oauth_token=oauth_token,
                 method="POST",
                 path=f"/repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers",
                 json_body=reviewer_body,
-                required_scopes=required_scopes,
             )
         except GitHubServiceError:
             # Continue even if reviewer assignment fails
@@ -2024,7 +1866,6 @@ def update_pull_request(
 
 
 def merge_pull_request(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     pull_number: int,
@@ -2035,7 +1876,6 @@ def merge_pull_request(
     """Merge a pull request.
 
     Args:
-        oauth_token: GitHub token
         owner: Repository owner
         repo: Repository name
         pull_number: PR number to merge
@@ -2046,10 +1886,6 @@ def merge_pull_request(
     Returns:
         Dictionary with merge result
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not all([owner, repo]) or pull_number <= 0:
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -2077,11 +1913,9 @@ def merge_pull_request(
         request_body["commit_message"] = commit_message
 
     result = _github_api_request(
-        oauth_token=oauth_token,
         method="PUT",
         path=f"/repos/{owner}/{repo}/pulls/{pull_number}/merge",
         json_body=request_body,
-        required_scopes=required_scopes,
     )
 
     return {
@@ -2092,7 +1926,6 @@ def merge_pull_request(
 
 
 def update_pull_request_branch(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     pull_number: int,
@@ -2101,7 +1934,6 @@ def update_pull_request_branch(
     """Update PR branch with latest changes from base branch.
 
     Args:
-        oauth_token: GitHub token
         owner: Repository owner
         repo: Repository name
         pull_number: PR number
@@ -2110,10 +1942,6 @@ def update_pull_request_branch(
     Returns:
         Dictionary with update result
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not all([owner, repo]) or pull_number <= 0:
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -2128,11 +1956,9 @@ def update_pull_request_branch(
         request_body["expected_head_sha"] = expected_head_sha
 
     result = _github_api_request(
-        oauth_token=oauth_token,
         method="PUT",
         path=f"/repos/{owner}/{repo}/pulls/{pull_number}/update-branch",
         json_body=request_body,
-        required_scopes=required_scopes,
     )
 
     return {
@@ -2142,7 +1968,6 @@ def update_pull_request_branch(
 
 
 def pull_request_review_write(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     pull_number: int,
@@ -2162,7 +1987,6 @@ def pull_request_review_write(
     - unresolve_thread: Unresolve review thread
 
     Args:
-        oauth_token: GitHub token
         owner: Repository owner
         repo: Repository name
         pull_number: PR number
@@ -2175,10 +1999,7 @@ def pull_request_review_write(
     Returns:
         Dictionary with operation result
     """
-    token_data = get_token_data(oauth_token)
     required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if method in ["resolve_thread", "unresolve_thread"]:
         # These only need thread_id
         if not thread_id:
@@ -2197,7 +2018,6 @@ def pull_request_review_write(
 
         try:
             result = _github_api_request(
-                oauth_token=oauth_token,
                 method="PATCH",
                 path=f"/repos/{owner}/{repo}/pulls/comments/{thread_id}",
                 json_body=request_body,
@@ -2243,7 +2063,6 @@ def pull_request_review_write(
             request_body["event"] = event
 
         result = _github_api_request(
-            oauth_token=oauth_token,
             method="POST",
             path=f"/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
             json_body=request_body,
@@ -2297,7 +2116,6 @@ def pull_request_review_write(
             request_body["body"] = body
 
         result = _github_api_request(
-            oauth_token=oauth_token,
             method="POST",
             path=f"/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
             json_body=request_body,
@@ -2322,7 +2140,6 @@ def pull_request_review_write(
 
         # Need to find pending review first
         reviews_result = _github_api_request(
-            oauth_token=oauth_token,
             method="GET",
             path=f"/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
             required_scopes=required_scopes,
@@ -2342,7 +2159,6 @@ def pull_request_review_write(
             )
 
         _github_api_request(
-            oauth_token=oauth_token,
             method="DELETE",
             path=f"/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{pending_review_id}",
             required_scopes=required_scopes,
@@ -2372,7 +2188,6 @@ def pull_request_review_write(
 
 
 def add_reply_to_pull_request_comment(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     pull_number: int,
@@ -2382,7 +2197,6 @@ def add_reply_to_pull_request_comment(
     """Add a reply to an existing PR comment.
 
     Args:
-        oauth_token: GitHub token
         owner: Repository owner
         repo: Repository name
         pull_number: PR number
@@ -2392,10 +2206,6 @@ def add_reply_to_pull_request_comment(
     Returns:
         Dictionary with new comment details
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not all([owner, repo, body]) or pull_number <= 0 or comment_id <= 0:
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -2411,11 +2221,9 @@ def add_reply_to_pull_request_comment(
     }
 
     result = _github_api_request(
-        oauth_token=oauth_token,
         method="POST",
         path=f"/repos/{owner}/{repo}/pulls/{pull_number}/comments",
         json_body=request_body,
-        required_scopes=required_scopes,
     )
 
     return {
@@ -2429,24 +2237,18 @@ def add_reply_to_pull_request_comment(
 
 
 def get_latest_release(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
 ) -> dict[str, Any]:
     """Get the latest release in a repository.
 
     Args:
-        oauth_token: GitHub token
         owner: Repository owner
         repo: Repository name
 
     Returns:
         Dictionary with release details
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not all([owner, repo]):
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -2457,10 +2259,8 @@ def get_latest_release(
         )
 
     result = _github_api_request(
-        oauth_token=oauth_token,
         method="GET",
         path=f"/repos/{owner}/{repo}/releases/latest",
-        required_scopes=required_scopes,
     )
 
     return {
@@ -2478,7 +2278,6 @@ def get_latest_release(
 
 
 def list_releases(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     page: int = 1,
@@ -2487,7 +2286,6 @@ def list_releases(
     """List releases in a repository.
 
     Args:
-        oauth_token: GitHub token
         owner: Repository owner
         repo: Repository name
         page: Page number for pagination
@@ -2496,10 +2294,6 @@ def list_releases(
     Returns:
         Dictionary with releases list
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not all([owner, repo]):
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -2512,11 +2306,9 @@ def list_releases(
     per_page = min(100, max(1, per_page))
 
     results = _github_api_request(
-        oauth_token=oauth_token,
         method="GET",
         path=f"/repos/{owner}/{repo}/releases",
         params={"page": page, "per_page": per_page},
-        required_scopes=required_scopes,
     )
 
     releases = []
@@ -2544,7 +2336,6 @@ def list_releases(
 
 
 def get_release_by_tag(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     tag: str,
@@ -2552,7 +2343,6 @@ def get_release_by_tag(
     """Get a specific release by tag name.
 
     Args:
-        oauth_token: GitHub token
         owner: Repository owner
         repo: Repository name
         tag: Tag name (e.g., 'v1.0.0')
@@ -2560,10 +2350,6 @@ def get_release_by_tag(
     Returns:
         Dictionary with release details
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not all([owner, repo, tag]):
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -2574,10 +2360,8 @@ def get_release_by_tag(
         )
 
     result = _github_api_request(
-        oauth_token=oauth_token,
         method="GET",
         path=f"/repos/{owner}/{repo}/releases/tags/{tag}",
-        required_scopes=required_scopes,
     )
 
     return {
@@ -2595,7 +2379,6 @@ def get_release_by_tag(
 
 
 def get_label(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     name: str,
@@ -2603,7 +2386,6 @@ def get_label(
     """Get a specific label from a repository.
 
     Args:
-        oauth_token: GitHub token
         owner: Repository owner
         repo: Repository name
         name: Label name
@@ -2611,10 +2393,6 @@ def get_label(
     Returns:
         Dictionary with label details
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not all([owner, repo, name]):
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -2625,10 +2403,8 @@ def get_label(
         )
 
     result = _github_api_request(
-        oauth_token=oauth_token,
         method="GET",
         path=f"/repos/{owner}/{repo}/labels/{name}",
-        required_scopes=required_scopes,
     )
 
     return {
@@ -2640,24 +2416,15 @@ def get_label(
     }
 
 
-def get_me(oauth_token: GitHubTokenData) -> dict[str, Any]:
+def get_me() -> dict[str, Any]:
     """Get details of the authenticated GitHub user.
-
-    Args:
-        oauth_token: GitHub token
 
     Returns:
         Dictionary with user profile details
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = []  # This endpoint doesn't require specific scopes
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     result = _github_api_request(
-        oauth_token=oauth_token,
         method="GET",
         path="/user",
-        required_scopes=required_scopes,
     )
 
     return {
@@ -2679,7 +2446,6 @@ def get_me(oauth_token: GitHubTokenData) -> dict[str, Any]:
 
 
 def sub_issue_write(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     issue_number: int,
@@ -2697,7 +2463,6 @@ def sub_issue_write(
     - reprioritize: Change order of sub-issues (use after_id or before_id)
 
     Args:
-        oauth_token: GitHub token
         owner: Repository owner
         repo: Repository name
         issue_number: Parent issue number
@@ -2710,10 +2475,6 @@ def sub_issue_write(
     Returns:
         Dictionary with operation result
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not all([owner, repo]) or issue_number <= 0 or sub_issue_id <= 0:
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -2758,12 +2519,10 @@ def sub_issue_write(
 
     # Note: GitHub's sub-issues use GraphQL primarily
     try:
-        result = _github_api_request(
-            oauth_token=oauth_token,
+        _github_api_request(
             method="PATCH" if method in ["add", "reprioritize"] else "DELETE",
             path=f"/repos/{owner}/{repo}/issues/{issue_number}/sub_issues/{sub_issue_id}",
             json_body=request_body if method in ["add", "reprioritize"] else None,
-            required_scopes=required_scopes,
         )
         return {
             "method": method,
@@ -2784,7 +2543,6 @@ def sub_issue_write(
 
 
 def assign_copilot_to_issue(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     issue_number: int,
@@ -2796,7 +2554,6 @@ def assign_copilot_to_issue(
     This delegates the issue to Copilot to create a pull request with code changes.
 
     Args:
-        oauth_token: GitHub token
         owner: Repository owner
         repo: Repository name
         issue_number: Issue number
@@ -2806,10 +2563,6 @@ def assign_copilot_to_issue(
     Returns:
         Dictionary with job/PR details
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not all([owner, repo]) or issue_number <= 0:
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -2831,11 +2584,9 @@ def assign_copilot_to_issue(
     # Note: This uses GitHub's Copilot API which may require special permissions
     try:
         result = _github_api_request(
-            oauth_token=oauth_token,
             method="POST",
             path=f"/repos/{owner}/{repo}/copilot/issues/{issue_number}/assignees",
             json_body=request_body,
-            required_scopes=required_scopes,
         )
 
         return {
@@ -2857,7 +2608,6 @@ def assign_copilot_to_issue(
 
 
 def request_copilot_review(
-    oauth_token: GitHubTokenData,
     owner: str,
     repo: str,
     pull_number: int,
@@ -2865,7 +2615,6 @@ def request_copilot_review(
     """Request a code review from GitHub Copilot on a pull request.
 
     Args:
-        oauth_token: GitHub token
         owner: Repository owner
         repo: Repository name
         pull_number: Pull request number
@@ -2873,10 +2622,6 @@ def request_copilot_review(
     Returns:
         Dictionary with review request status
     """
-    token_data = get_token_data(oauth_token)
-    required_scopes = ["repo"]
-    _validate_required_scopes(token_data["scopes"], required_scopes)
-
     if not all([owner, repo]) or pull_number <= 0:
         raise GitHubServiceError(
             code="INVALID_INPUT",
@@ -2891,12 +2636,10 @@ def request_copilot_review(
     }
 
     try:
-        result = _github_api_request(
-            oauth_token=oauth_token,
+        _github_api_request(
             method="POST",
             path=f"/repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers",
             json_body=request_body,
-            required_scopes=required_scopes,
         )
 
         return {

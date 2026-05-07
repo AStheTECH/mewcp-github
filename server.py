@@ -4,6 +4,7 @@
 import logging
 
 from fastmcp import FastMCP
+from fastmcp_credentials import CredentialMiddleware, HeaderCredentialBackend
 
 from github_mcp.cli import parse_args
 from github_mcp.config import configure_logging
@@ -12,7 +13,8 @@ from github_mcp.tools import register_tools
 configure_logging()
 logger = logging.getLogger("github-mcp-server")
 
-mcp = FastMCP("CL GitHub MCP Server")
+backend = HeaderCredentialBackend()
+mcp = FastMCP("CL GitHub MCP Server", middleware=[CredentialMiddleware(backend, "oauth")])
 register_tools(mcp)
 
 # Expose ASGI app for hosted runtimes.

@@ -3,10 +3,7 @@ import logging
 
 from fastmcp import FastMCP
 from pydantic import Field
-
-from .config import TOOL_REQUIRED_SCOPES
 from .response import error_response, success_response
-from .schemas import GitHubTokenData
 from .service import (
     GitHubServiceError,
     add_issue_comment,
@@ -61,26 +58,15 @@ def register_tools(mcp: FastMCP) -> None:
         description="Get basic details for a GitHub repository.",
     )
     def get_repo(
-        oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token with token and optional scopes"
-        ),
         owner: str = Field(..., description="Repository owner, for example octocat"),
         repo: str = Field(..., description="Repository name"),
     ) -> str:
         try:
-            result = get_repo_service(oauth_token, owner, repo)
-            granted_scopes = oauth_token.scopes
+            result = get_repo_service(owner, repo)
             return json.dumps(
                 success_response(
                     "get_repo",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["get_repo"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -111,27 +97,18 @@ def register_tools(mcp: FastMCP) -> None:
         description="List branches in a GitHub repository.",
     )
     def list_branches_tool(
-        oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token input with token and optional scopes"
-        ),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         page: int = Field(1, description="Page number"),
         perPage: int = Field(30, description="Items per page"),
     ) -> str:
         try:
-            data = list_branches(oauth_token, owner, repo, page=page, per_page=perPage)
-            granted_scopes = oauth_token.scopes
+            data = list_branches(owner, repo, page=page, per_page=perPage)
             return json.dumps(
                 success_response(
                     "list_branches",
                     data,
                     meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["list_branches"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        },
                         "pagination": {
                             "page": page,
                             "perPage": perPage,
@@ -167,9 +144,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Search GitHub repositories.",
     )
     def search_repositories_tool(
-        oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token input with token and optional scopes"
-        ),
         query: str = Field(..., description="Search query"),
         sort: str = Field("stars", description="Sort by: stars, forks, updated"),
         order: str = Field("desc", description="Order: asc or desc"),
@@ -178,20 +152,12 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             data = search_repositories(
-                oauth_token, query, sort=sort, order=order, page=page, per_page=perPage
+                query, sort=sort, order=order, page=page, per_page=perPage
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "search_repositories",
                     data,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["search_repositories"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -222,9 +188,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="List commits in a GitHub repository.",
     )
     def list_commits_tool(
-        oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token input with token and optional scopes"
-        ),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         sha: str | None = Field(None, description="Branch or commit SHA"),
@@ -237,7 +200,6 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             data = list_commits(
-                oauth_token,
                 owner,
                 repo,
                 sha=sha,
@@ -248,18 +210,10 @@ def register_tools(mcp: FastMCP) -> None:
                 page=page,
                 per_page=perPage,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "list_commits",
                     data,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["list_commits"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -290,30 +244,20 @@ def register_tools(mcp: FastMCP) -> None:
         description="Get details of a specific commit.",
     )
     def get_commit_tool(
-        oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token input with token and optional scopes"
-        ),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         sha: str = Field(..., description="Commit SHA"),
         include_diff: bool = Field(True, description="Include file changes in diff"),
     ) -> str:
         try:
-            data = get_commit(oauth_token, owner, repo, sha, include_diff=include_diff)
-            granted_scopes = oauth_token.scopes
+            data = get_commit(owner, repo, sha, include_diff=include_diff)
             return json.dumps(
                 success_response(
                     "get_commit",
                     data,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["get_commit"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
+
         except GitHubServiceError as exc:
             logger.error(
                 "Failed get_commit for %s/%s:%s: %s", owner, repo, sha, exc.message
@@ -344,9 +288,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="List issues in a GitHub repository.",
     )
     def list_issues_tool(
-        oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token input with token and optional scopes"
-        ),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         state: str = Field("open", description="Filter by state: open, closed, all"),
@@ -358,7 +299,6 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             data = list_issues(
-                oauth_token,
                 owner,
                 repo,
                 state=state,
@@ -366,18 +306,10 @@ def register_tools(mcp: FastMCP) -> None:
                 page=page,
                 per_page=perPage,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "list_issues",
                     data,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["list_issues"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -408,28 +340,17 @@ def register_tools(mcp: FastMCP) -> None:
         description="Get file or directory contents from a GitHub repository.",
     )
     def get_file_contents_tool(
-        oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token input with token and optional scopes"
-        ),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         path: str = Field("/", description="File or directory path"),
         ref: str | None = Field(None, description="Branch, tag, or commit SHA"),
     ) -> str:
         try:
-            data = get_file_contents(oauth_token, owner, repo, path=path, ref=ref)
-            granted_scopes = oauth_token.scopes
+            data = get_file_contents(owner, repo, path=path, ref=ref)
             return json.dumps(
                 success_response(
                     "get_file_contents",
                     data,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["get_file_contents"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -468,10 +389,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Fast and precise code search across GitHub repositories using GitHub's native search engine. Best for finding exact symbols, functions, classes, or specific code patterns.",
     )
     def search_code_tool(
-        oauth_token: GitHubTokenData = Field(
-            ...,
-            description="GitHub personal access token or OAuth token (with repo scope)",
-        ),
         query: str = Field(
             ...,
             description="Search query using GitHub code search syntax. Examples: 'content:Skill language:Java org:github', 'NOT is:archived language:Python OR language:go', 'repo:github/github-mcp-server', 'filename:test.py', 'path:src/components'. Supports exact matching, language filters, path filters, org filters, and more.",
@@ -495,19 +412,13 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             data = search_code(
-                oauth_token, query, sort=sort, order=order, page=page, per_page=perPage
+                query, sort=sort, order=order, page=page, per_page=perPage
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "search_code",
                     data,
                     meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["search_code"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        },
                         "pagination": {
                             "page": page,
                             "perPage": perPage,
@@ -543,10 +454,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Search GitHub users by name, location, followers, or other attributes. Returns user profiles with login, ID, and avatar URL for further investigation.",
     )
     def search_users_tool(
-        oauth_token: GitHubTokenData = Field(
-            ...,
-            description="GitHub personal access token or OAuth token (with repo scope)",
-        ),
         query: str = Field(
             ...,
             description="User search query using GitHub's search syntax. Examples: 'john smith', 'location:seattle', 'followers:>100', 'repos:>50 language:python'. Support full name, location, follower counts, repository counts, and more.",
@@ -570,19 +477,13 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             data = search_users(
-                oauth_token, query, sort=sort, order=order, page=page, per_page=perPage
+                query, sort=sort, order=order, page=page, per_page=perPage
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "search_users",
                     data,
                     meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["search_users"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        },
                         "pagination": {
                             "page": page,
                             "perPage": perPage,
@@ -618,10 +519,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Search issues and pull requests across GitHub. Filter by state, labels, creator, assignee, and more. Use owner+repo parameters to scope search to specific repositories.",
     )
     def search_issues_tool(
-        oauth_token: GitHubTokenData = Field(
-            ...,
-            description="GitHub personal access token or OAuth token (with repo scope)",
-        ),
         query: str = Field(
             ...,
             description="Search query using GitHub issue search syntax. Examples: 'is:open label:bug', 'is:closed author:octocat', 'type:issue state:open label:enhancement'. Supports state filters, label filters, author filters, assignee filters, and more.",
@@ -653,7 +550,6 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             data = search_issues(
-                oauth_token,
                 query,
                 sort=sort,
                 order=order,
@@ -662,17 +558,11 @@ def register_tools(mcp: FastMCP) -> None:
                 page=page,
                 per_page=perPage,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "search_issues",
                     data,
                     meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["search_issues"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        },
                         "pagination": {
                             "page": page,
                             "perPage": perPage,
@@ -708,10 +598,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Get detailed information about a specific GitHub issue including title, body, state, labels, assignees, and timestamps.",
     )
     def get_issue_tool(
-        oauth_token: GitHubTokenData = Field(
-            ...,
-            description="GitHub personal access token or OAuth token (with repo or public_repo scope)",
-        ),
         owner: str = Field(
             ..., description="Repository owner name. Example: 'github'."
         ),
@@ -724,19 +610,11 @@ def register_tools(mcp: FastMCP) -> None:
         ),
     ) -> str:
         try:
-            data = get_issue(oauth_token, owner, repo, issue_number)
-            granted_scopes = oauth_token.scopes
+            data = get_issue(owner, repo, issue_number)
             return json.dumps(
                 success_response(
                     "get_issue",
                     data,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["get_issue"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -775,10 +653,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Get all comments on a GitHub issue with pagination support. Returns comment body, author, creation time, and timestamps.",
     )
     def get_issue_comments_tool(
-        oauth_token: GitHubTokenData = Field(
-            ...,
-            description="GitHub personal access token or OAuth token (with repo or public_repo scope)",
-        ),
         owner: str = Field(
             ..., description="Repository owner name. Example: 'github'."
         ),
@@ -800,19 +674,13 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             data = get_issue_comments(
-                oauth_token, owner, repo, issue_number, page=page, per_page=perPage
+                owner, repo, issue_number, page=page, per_page=perPage
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "get_issue_comments",
                     data,
                     meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["get_issue_comments"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        },
                         "pagination": {
                             "page": page,
                             "perPage": perPage,
@@ -860,10 +728,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Create a new GitHub issue in a repository. Returns the issue ID, number, and URL on successful creation.",
     )
     def create_issue_tool(
-        oauth_token: GitHubTokenData = Field(
-            ...,
-            description="GitHub personal access token or OAuth token (with repo scope)",
-        ),
         owner: str = Field(
             ..., description="Repository owner name. Example: 'github'."
         ),
@@ -893,7 +757,6 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             data = create_issue(
-                oauth_token,
                 owner,
                 repo,
                 title,
@@ -902,18 +765,10 @@ def register_tools(mcp: FastMCP) -> None:
                 labels=labels,
                 milestone=milestone,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "create_issue",
                     data,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["create_issue"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -944,10 +799,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Add a comment to a GitHub issue or pull request. Comments support GitHub markdown formatting.",
     )
     def add_issue_comment_tool(
-        oauth_token: GitHubTokenData = Field(
-            ...,
-            description="GitHub personal access token or OAuth token (with repo scope)",
-        ),
         owner: str = Field(
             ..., description="Repository owner name. Example: 'github'."
         ),
@@ -963,19 +814,11 @@ def register_tools(mcp: FastMCP) -> None:
         ),
     ) -> str:
         try:
-            data = add_issue_comment(oauth_token, owner, repo, issue_number, body)
-            granted_scopes = oauth_token.scopes
+            data = add_issue_comment(owner, repo, issue_number, body)
             return json.dumps(
                 success_response(
                     "add_issue_comment",
                     data,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["add_issue_comment"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -1018,10 +861,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Update GitHub issue properties including title, body, state (open/closed), assignees, and labels. Provide only fields you want to change.",
     )
     def update_issue_tool(
-        oauth_token: GitHubTokenData = Field(
-            ...,
-            description="GitHub personal access token or OAuth token (with repo scope)",
-        ),
         owner: str = Field(
             ..., description="Repository owner name. Example: 'github'."
         ),
@@ -1062,7 +901,6 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             data = update_issue(
-                oauth_token,
                 owner,
                 repo,
                 issue_number,
@@ -1074,18 +912,10 @@ def register_tools(mcp: FastMCP) -> None:
                 labels=labels,
                 milestone=milestone,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "update_issue",
                     data,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["update_issue"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -1128,9 +958,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Find all repositories in an organization where specific contributors have made contributions.",
     )
     def list_org_repositories_by_contributor_tool(
-        oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token input with token and optional scopes"
-        ),
         org: str = Field(..., description="Organization name"),
         contributor_usernames: str = Field(
             ...,
@@ -1148,22 +975,12 @@ def register_tools(mcp: FastMCP) -> None:
             ]
 
             data = list_org_repositories_by_contributor(
-                oauth_token, org, usernames_list, repo_type=repo_type
+                org, usernames_list, repo_type=repo_type
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "list_org_repositories_by_contributor",
                     data,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES[
-                                "list_org_repositories_by_contributor"
-                            ],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -1204,10 +1021,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="List all git tags in a repository with pagination support. Returns tag names, commit info, and download URLs.",
     )
     def list_tags_tool(
-        oauth_token: GitHubTokenData = Field(
-            ...,
-            description="GitHub personal access token or OAuth token (with repo scope)",
-        ),
         owner: str = Field(
             ..., description="Repository owner name. Example: 'github'."
         ),
@@ -1224,18 +1037,12 @@ def register_tools(mcp: FastMCP) -> None:
         ),
     ) -> str:
         try:
-            data = list_tags(oauth_token, owner, repo, page=page, per_page=perPage)
-            granted_scopes = oauth_token.scopes
+            data = list_tags(owner, repo, page=page, per_page=perPage)
             return json.dumps(
                 success_response(
                     "list_tags",
                     data,
                     meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["list_tags"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        },
                         "pagination": {
                             "page": page,
                             "perPage": perPage,
@@ -1271,10 +1078,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Get detailed information about a specific git tag including commit SHA and object info.",
     )
     def get_tag_tool(
-        oauth_token: GitHubTokenData = Field(
-            ...,
-            description="GitHub personal access token or OAuth token (with repo scope)",
-        ),
         owner: str = Field(
             ..., description="Repository owner name. Example: 'github'."
         ),
@@ -1287,19 +1090,11 @@ def register_tools(mcp: FastMCP) -> None:
         ),
     ) -> str:
         try:
-            data = get_tag(oauth_token, owner, repo, tag)
-            granted_scopes = oauth_token.scopes
+            data = get_tag(owner, repo, tag)
             return json.dumps(
                 success_response(
                     "get_tag",
                     data,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["get_tag"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -1332,10 +1127,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Create a new GitHub repository in your personal account or an organization.",
     )
     def create_repository_tool(
-        oauth_token: GitHubTokenData = Field(
-            ...,
-            description="GitHub personal access token or OAuth token (with repo scope)",
-        ),
         name: str = Field(
             ...,
             description="Repository name (required). Must be unique in account/organization.",
@@ -1363,7 +1154,6 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             data = create_repository(
-                oauth_token,
                 name=name,
                 description=description,
                 private=private,
@@ -1371,18 +1161,10 @@ def register_tools(mcp: FastMCP) -> None:
                 gitignore_template=gitignore_template,
                 org=org,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "create_repository",
                     data,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["create_repository"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -1413,10 +1195,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Create or update a file in a repository. Prevents accidental overwrites with SHA validation.",
     )
     def create_or_update_file_tool(
-        oauth_token: GitHubTokenData = Field(
-            ...,
-            description="GitHub personal access token or OAuth token (with repo scope)",
-        ),
         owner: str = Field(..., description="Repository owner name."),
         repo: str = Field(..., description="Repository name."),
         path: str = Field(
@@ -1442,7 +1220,6 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             data = create_or_update_file(
-                oauth_token,
                 owner=owner,
                 repo=repo,
                 path=path,
@@ -1451,18 +1228,10 @@ def register_tools(mcp: FastMCP) -> None:
                 branch=branch,
                 sha=sha,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "create_or_update_file",
                     data,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["create_or_update_file"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -1505,10 +1274,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Fork a repository to your personal account or an organization.",
     )
     def fork_repository_tool(
-        oauth_token: GitHubTokenData = Field(
-            ...,
-            description="GitHub personal access token or OAuth token (with repo scope)",
-        ),
         owner: str = Field(..., description="Original repository owner."),
         repo: str = Field(..., description="Original repository name."),
         org: str | None = Field(
@@ -1517,19 +1282,11 @@ def register_tools(mcp: FastMCP) -> None:
         ),
     ) -> str:
         try:
-            data = fork_repository(oauth_token, owner=owner, repo=repo, org=org)
-            granted_scopes = oauth_token.scopes
+            data = fork_repository(owner=owner, repo=repo, org=org)
             return json.dumps(
                 success_response(
                     "fork_repository",
                     data,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["fork_repository"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -1562,10 +1319,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Create a new branch in a repository from source branch or commit SHA.",
     )
     def create_branch_tool(
-        oauth_token: GitHubTokenData = Field(
-            ...,
-            description="GitHub personal access token or OAuth token (with repo scope)",
-        ),
         owner: str = Field(..., description="Repository owner name."),
         repo: str = Field(..., description="Repository name."),
         branch_name: str = Field(
@@ -1579,20 +1332,12 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             data = create_branch(
-                oauth_token, owner=owner, repo=repo, branch_name=branch_name, sha=sha
+                owner=owner, repo=repo, branch_name=branch_name, sha=sha
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "create_branch",
                     data,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["create_branch"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -1635,10 +1380,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Push multiple files to a repository in a single atomic commit. Supports creating new branches and file directories.",
     )
     def push_files_tool(
-        oauth_token: GitHubTokenData = Field(
-            ...,
-            description="GitHub personal access token or OAuth token (with repo scope)",
-        ),
         owner: str = Field(..., description="Repository owner name."),
         repo: str = Field(..., description="Repository name."),
         files_json: str = Field(
@@ -1667,7 +1408,6 @@ def register_tools(mcp: FastMCP) -> None:
 
             files = json_lib.loads(files_json)
             data = push_files(
-                oauth_token,
                 owner=owner,
                 repo=repo,
                 files=files,
@@ -1676,18 +1416,10 @@ def register_tools(mcp: FastMCP) -> None:
                 author_name=author_name,
                 author_email=author_email,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "push_files",
                     data,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["push_files"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -1718,9 +1450,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Get details for a pull request with flexible method options (get, get_files, get_status, get_comments, get_review_comments).",
     )
     def pr_read(
-        oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token with token and optional scopes"
-        ),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         pull_number: int = Field(..., description="Pull request number"),
@@ -1733,7 +1462,6 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             result = pull_request_read(
-                oauth_token,
                 owner=owner,
                 repo=repo,
                 pull_number=pull_number,
@@ -1741,18 +1469,10 @@ def register_tools(mcp: FastMCP) -> None:
                 page=page,
                 per_page=per_page,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "pull_request_read",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["pull_request_read"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -1795,9 +1515,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="List pull requests in a GitHub repository with filtering and sorting options.",
     )
     def list_prs(
-        oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token with token and optional scopes"
-        ),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         state: str = Field("open", description="Filter by state: open, closed, or all"),
@@ -1815,7 +1532,6 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             result = list_pull_requests(
-                oauth_token,
                 owner=owner,
                 repo=repo,
                 state=state,
@@ -1826,18 +1542,10 @@ def register_tools(mcp: FastMCP) -> None:
                 page=page,
                 per_page=per_page,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "list_pull_requests",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["list_pull_requests"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -1870,9 +1578,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Search for pull requests across GitHub using search syntax.",
     )
     def search_prs(
-        oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token with token and optional scopes"
-        ),
         query: str = Field(..., description="Search query using GitHub search syntax"),
         sort: str = Field(
             "updated", description="Sort field: updated, created, comments, etc."
@@ -1889,7 +1594,6 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             result = search_pull_requests(
-                oauth_token,
                 query=query,
                 sort=sort,
                 order=order,
@@ -1898,18 +1602,10 @@ def register_tools(mcp: FastMCP) -> None:
                 page=page,
                 per_page=per_page,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "search_pull_requests",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["search_pull_requests"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -1940,9 +1636,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Create a new pull request in a GitHub repository.",
     )
     def create_pr(
-        oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token with token and optional scopes"
-        ),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         title: str = Field(..., description="Pull request title"),
@@ -1956,7 +1649,6 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             result = create_pull_request(
-                oauth_token,
                 owner=owner,
                 repo=repo,
                 title=title,
@@ -1966,18 +1658,10 @@ def register_tools(mcp: FastMCP) -> None:
                 draft=draft,
                 maintainer_can_modify=maintainer_can_modify,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "create_pull_request",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["create_pull_request"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -2010,9 +1694,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Update an existing pull request in a GitHub repository.",
     )
     def update_pr(
-        oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token with token and optional scopes"
-        ),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         pull_number: int = Field(..., description="Pull request number"),
@@ -2030,7 +1711,6 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             result = update_pull_request(
-                oauth_token,
                 owner=owner,
                 repo=repo,
                 pull_number=pull_number,
@@ -2042,18 +1722,10 @@ def register_tools(mcp: FastMCP) -> None:
                 maintainer_can_modify=maintainer_can_modify,
                 reviewers=reviewers,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "update_pull_request",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["update_pull_request"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -2096,9 +1768,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Merge a pull request in a GitHub repository.",
     )
     def merge_pr(
-        oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token with token and optional scopes"
-        ),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         pull_number: int = Field(..., description="Pull request number"),
@@ -2114,7 +1783,6 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             result = merge_pull_request(
-                oauth_token,
                 owner=owner,
                 repo=repo,
                 pull_number=pull_number,
@@ -2122,18 +1790,10 @@ def register_tools(mcp: FastMCP) -> None:
                 commit_title=commit_title,
                 commit_message=commit_message,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "merge_pull_request",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["merge_pull_request"],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -2176,9 +1836,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Update pull request branch with latest changes from base branch.",
     )
     def update_pr_branch(
-        oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token with token and optional scopes"
-        ),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         pull_number: int = Field(..., description="Pull request number"),
@@ -2188,26 +1845,15 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             result = update_pull_request_branch(
-                oauth_token,
                 owner=owner,
                 repo=repo,
                 pull_number=pull_number,
                 expected_head_sha=expected_head_sha,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "update_pull_request_branch",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES[
-                                "update_pull_request_branch"
-                            ],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -2250,9 +1896,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Write operations on PR reviews (create, submit, delete, resolve/unresolve threads).",
     )
     def pr_review_write(
-        oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token with token and optional scopes"
-        ),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         pull_number: int = Field(..., description="Pull request number"),
@@ -2274,7 +1917,6 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             result = pull_request_review_write(
-                oauth_token,
                 owner=owner,
                 repo=repo,
                 pull_number=pull_number,
@@ -2284,20 +1926,10 @@ def register_tools(mcp: FastMCP) -> None:
                 event=event,
                 thread_id=thread_id,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "pull_request_review_write",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES[
-                                "pull_request_review_write"
-                            ],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -2340,9 +1972,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Add a reply to an existing pull request comment.",
     )
     def add_pr_comment_reply(
-        oauth_token: GitHubTokenData = Field(
-            ..., description="GitHub token with token and optional scopes"
-        ),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         pull_number: int = Field(..., description="Pull request number"),
@@ -2351,27 +1980,16 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             result = add_reply_to_pull_request_comment(
-                oauth_token,
                 owner=owner,
                 repo=repo,
                 pull_number=pull_number,
                 comment_id=comment_id,
                 body=body,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "add_reply_to_pull_request_comment",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES[
-                                "add_reply_to_pull_request_comment"
-                            ],
-                            "granted": granted_scopes,
-                            "passed": True,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -2414,23 +2032,15 @@ def register_tools(mcp: FastMCP) -> None:
         description="Get the latest release of a GitHub repository.",
     )
     def get_latest_release_tool(
-        oauth_token: GitHubTokenData = Field(..., description="GitHub token"),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
     ) -> str:
         try:
-            result = get_latest_release(oauth_token, owner, repo)
-            granted_scopes = oauth_token.scopes
+            result = get_latest_release(owner, repo)
             return json.dumps(
                 success_response(
                     "get_latest_release",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["get_latest_release"],
-                            "granted": granted_scopes,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -2463,25 +2073,17 @@ def register_tools(mcp: FastMCP) -> None:
         description="List releases in a GitHub repository.",
     )
     def list_releases_tool(
-        oauth_token: GitHubTokenData = Field(..., description="GitHub token"),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         page: int = Field(1, description="Page number for pagination"),
         per_page: int = Field(30, description="Results per page"),
     ) -> str:
         try:
-            result = list_releases(oauth_token, owner, repo, page, per_page)
-            granted_scopes = oauth_token.scopes
+            result = list_releases(owner, repo, page, per_page)
             return json.dumps(
                 success_response(
                     "list_releases",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["list_releases"],
-                            "granted": granted_scopes,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -2512,24 +2114,16 @@ def register_tools(mcp: FastMCP) -> None:
         description="Get a specific release by tag name.",
     )
     def get_release_by_tag_tool(
-        oauth_token: GitHubTokenData = Field(..., description="GitHub token"),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         tag: str = Field(..., description="Tag name"),
     ) -> str:
         try:
-            result = get_release_by_tag(oauth_token, owner, repo, tag)
-            granted_scopes = oauth_token.scopes
+            result = get_release_by_tag(owner, repo, tag)
             return json.dumps(
                 success_response(
                     "get_release_by_tag",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["get_release_by_tag"],
-                            "granted": granted_scopes,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -2568,24 +2162,16 @@ def register_tools(mcp: FastMCP) -> None:
         description="Get a specific label from a repository.",
     )
     def get_label_tool(
-        oauth_token: GitHubTokenData = Field(..., description="GitHub token"),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         name: str = Field(..., description="Label name"),
     ) -> str:
         try:
-            result = get_label(oauth_token, owner, repo, name)
-            granted_scopes = oauth_token.scopes
+            result = get_label(owner, repo, name)
             return json.dumps(
                 success_response(
                     "get_label",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["get_label"],
-                            "granted": granted_scopes,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -2623,22 +2209,13 @@ def register_tools(mcp: FastMCP) -> None:
         name="get_me",
         description="Get details of the authenticated GitHub user.",
     )
-    def get_me_tool(
-        oauth_token: GitHubTokenData = Field(..., description="GitHub token"),
-    ) -> str:
+    def get_me_tool() -> str:
         try:
-            result = get_me(oauth_token)
-            granted_scopes = oauth_token.scopes
+            result = get_me()
             return json.dumps(
                 success_response(
                     "get_me",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["get_me"],
-                            "granted": granted_scopes,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -2669,7 +2246,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Manage sub-issues for a parent issue (add, remove, reprioritize).",
     )
     def sub_issue_write_tool(
-        oauth_token: GitHubTokenData = Field(..., description="GitHub token"),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         issue_number: int = Field(..., description="Parent issue number"),
@@ -2689,7 +2265,6 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             result = sub_issue_write(
-                oauth_token,
                 owner,
                 repo,
                 issue_number,
@@ -2699,17 +2274,10 @@ def register_tools(mcp: FastMCP) -> None:
                 after_id,
                 before_id,
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "sub_issue_write",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["sub_issue_write"],
-                            "granted": granted_scopes,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -2752,7 +2320,6 @@ def register_tools(mcp: FastMCP) -> None:
         description="Assign GitHub Copilot to work on an issue.",
     )
     def assign_copilot_to_issue_tool(
-        oauth_token: GitHubTokenData = Field(..., description="GitHub token"),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         issue_number: int = Field(..., description="Issue number"),
@@ -2765,19 +2332,12 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         try:
             result = assign_copilot_to_issue(
-                oauth_token, owner, repo, issue_number, base_ref, custom_instructions
+                owner, repo, issue_number, base_ref, custom_instructions
             )
-            granted_scopes = oauth_token.scopes
             return json.dumps(
                 success_response(
                     "assign_copilot_to_issue",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["assign_copilot_to_issue"],
-                            "granted": granted_scopes,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
@@ -2820,24 +2380,16 @@ def register_tools(mcp: FastMCP) -> None:
         description="Request a code review from GitHub Copilot on a pull request.",
     )
     def request_copilot_review_tool(
-        oauth_token: GitHubTokenData = Field(..., description="GitHub token"),
         owner: str = Field(..., description="Repository owner"),
         repo: str = Field(..., description="Repository name"),
         pull_number: int = Field(..., description="Pull request number"),
     ) -> str:
         try:
-            result = request_copilot_review(oauth_token, owner, repo, pull_number)
-            granted_scopes = oauth_token.scopes
+            result = request_copilot_review(owner, repo, pull_number)
             return json.dumps(
                 success_response(
                     "request_copilot_review",
                     result,
-                    meta={
-                        "scope_check": {
-                            "required": TOOL_REQUIRED_SCOPES["request_copilot_review"],
-                            "granted": granted_scopes,
-                        }
-                    },
                 )
             )
         except GitHubServiceError as exc:
