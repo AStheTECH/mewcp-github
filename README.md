@@ -1,1712 +1,1211 @@
+**Your entire GitHub workflow, accessible through AI.**
 
-A Model Context Protocol (MCP) server that exposes GitHub's API for repository management, search, collaboration workflows, and automation tasks.
+A Model Context Protocol (MCP) server that exposes GitHub's API for repository management, code search, issue tracking, pull request workflows, and release management.
 
----
 
 ## Overview
 
-The GitHub MCP Server provides stateless, multi-user GitHub API access through 40+ MCP tools:
+The GitHub MCP Server provides comprehensive access to GitHub operations:
 
-- Repository, branch, commit, and file operations
-- Issues and pull request lifecycle management
-- Search, releases, labels, and Copilot workflow automation
+- Manage repositories, branches, commits, files, and releases across personal and organization accounts
+- Full issue and pull request lifecycle — create, update, review, merge, and automate with Copilot
+- Advanced search across repositories, code, users, issues, and pull requests
 
 Perfect for:
 
-- AI-driven code maintenance and repository automation
-- Engineering workflow orchestration across GitHub resources
-- Building custom assistants for issue triage and PR operations
+- AI assistants that need to read, write, or manage GitHub repositories
+- Automating code review, issue triage, and release workflows
+- Building developer tools that integrate deeply with GitHub
 
----
 
 ## Tools
+
+### Repository Operations
 
 <details>
 <summary><code>get_repo</code> — Get repository details</summary>
 
-Fetches core metadata for a repository, including owner, visibility, stars, and default branch.
+Returns basic information about a GitHub repository.
 
 **Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload `{ "token": "...", "scopes": ["repo"] }`
-- `owner` (string, required) — Repository owner
+```
+- `owner` (string, required) — Repository owner (user or organization)
 - `repo` (string, required) — Repository name
+```
 
 **Output:**
 
 ```json
 {
-	"ok": true,
-	"data": {
-		"full_name": "owner/repo",
-		"default_branch": "main",
-		"private": false
-	}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/get_repo
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "github",
-	"repo": "docs"
+  "name": "my-repo",
+  "full_name": "owner/my-repo",
+  "description": "...",
+  "default_branch": "main",
+  "stargazers_count": 42,
+  ...
 }
 ```
 
 </details>
+
 
 <details>
 <summary><code>list_branches</code> — List repository branches</summary>
 
-Returns paginated branch metadata for a repository.
+Returns a paginated list of branches in a repository.
 
 **Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
+```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `page` (integer, optional) — Page number
-- `perPage` (integer, optional) — Items per page
+- `page` (int, optional) — Page number (default: 1)
+- `per_page` (int, optional) — Results per page (max: 100, default: 30)
+```
 
 **Output:**
 
 ```json
 {
-	"ok": true,
-	"data": [
-		{"name": "main", "sha": "abc123", "protected": true}
-	]
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/list_branches
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "github",
-	"repo": "docs",
-	"page": 1,
-	"perPage": 30
+  "branches": [{ "name": "main", "commit": { "sha": "abc123" } }, ...]
 }
 ```
 
 </details>
+
+
+<details>
+<summary><code>create_repository</code> — Create a new repository</summary>
+
+Creates a new repository under the authenticated user or an organization.
+
+**Inputs:**
+```
+- `name` (string, required) — Repository name
+- `description` (string, optional) — Repository description
+- `private` (bool, optional) — Make the repository private (default: false)
+- `org` (string, optional) — Organization to create the repo under (omit for personal)
+- `auto_init` (bool, optional) — Initialize with a README (default: false)
+```
+
+**Output:**
+
+```json
+{
+  "full_name": "owner/new-repo",
+  "html_url": "https://github.com/owner/new-repo",
+  ...
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>fork_repository</code> — Fork a repository</summary>
+
+Forks a repository to the authenticated user's account or an organization.
+
+**Inputs:**
+```
+- `owner` (string, required) — Owner of the repository to fork
+- `repo` (string, required) — Repository to fork
+- `org` (string, optional) — Organization to fork into (omit for personal account)
+```
+
+**Output:**
+
+```json
+{
+  "full_name": "your-username/forked-repo",
+  "html_url": "https://github.com/your-username/forked-repo",
+  ...
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>create_branch</code> — Create a new branch</summary>
+
+Creates a new branch in a repository from a specified commit SHA.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `branch` (string, required) — Name of the new branch
+- `sha` (string, required) — Commit SHA to branch from
+```
+
+**Output:**
+
+```json
+{
+  "ref": "refs/heads/new-branch",
+  "object": { "sha": "abc123" }
+}
+```
+
+</details>
+
+
+### File & Commit Operations
+
+<details>
+<summary><code>get_file_contents</code> — Get file or directory contents</summary>
+
+Returns the contents of a file or directory from a repository.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `path` (string, required) — File or directory path
+- `branch` (string, optional) — Branch, tag, or commit SHA (default: default branch)
+```
+
+**Output:**
+
+```json
+{
+  "type": "file",
+  "name": "README.md",
+  "content": "base64-encoded-content",
+  "sha": "abc123",
+  ...
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>create_or_update_file</code> — Create or update a single file</summary>
+
+Creates a new file or updates an existing file in a repository.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `path` (string, required) — Path to the file
+- `content` (string, required) — File content (base64 encoded)
+- `message` (string, required) — Commit message
+- `branch` (string, optional) — Branch to commit to
+- `sha` (string, optional) — SHA of file being replaced (required for updates)
+```
+
+**Output:**
+
+```json
+{
+  "commit": { "sha": "abc123", "message": "..." },
+  "content": { "name": "file.txt", "path": "file.txt" }
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>push_files</code> — Push multiple files in one commit</summary>
+
+Atomically pushes multiple files to a repository branch in a single commit.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `branch` (string, required) — Branch to push to
+- `files` (list, required) — List of file objects with path and content
+- `message` (string, required) — Commit message
+```
+
+**Output:**
+
+```json
+{
+  "sha": "new-commit-sha",
+  "message": "Commit message"
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>list_commits</code> — List commits in a repository</summary>
+
+Returns a paginated list of commits with optional filtering.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `sha` (string, optional) — Branch or commit SHA to start from
+- `path` (string, optional) — Filter commits by file path
+- `author` (string, optional) — Filter by author username or email
+- `since` (string, optional) — ISO 8601 datetime; only commits after this date
+- `until` (string, optional) — ISO 8601 datetime; only commits before this date
+- `page` (int, optional) — Page number
+- `per_page` (int, optional) — Results per page (max: 100)
+```
+
+**Output:**
+
+```json
+{
+  "commits": [{ "sha": "abc123", "commit": { "message": "..." }, "author": {...} }, ...]
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>get_commit</code> — Get a specific commit</summary>
+
+Returns details of a single commit including the diff.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `sha` (string, required) — Commit SHA
+```
+
+**Output:**
+
+```json
+{
+  "sha": "abc123",
+  "commit": { "message": "...", "author": {...} },
+  "files": [{ "filename": "...", "additions": 5, "deletions": 2 }]
+}
+```
+
+</details>
+
+
+### Search Operations
 
 <details>
 <summary><code>search_repositories</code> — Search GitHub repositories</summary>
 
-Searches repositories by query with sorting and pagination.
+Searches GitHub repositories using query syntax with optional sorting.
 
 **Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `query` (string, required) — Search query
-- `sort` (string, optional) — `stars`, `forks`, `updated`
-- `order` (string, optional) — `asc` or `desc`
-- `page` (integer, optional) — Page number
-- `perPage` (integer, optional) — Items per page
+```
+- `query` (string, required) — Search query (supports GitHub search syntax)
+- `sort` (string, optional) — Sort by: stars, forks, updated, or help-wanted-issues
+- `order` (string, optional) — Sort direction: asc or desc
+- `page` (int, optional) — Page number
+- `per_page` (int, optional) — Results per page (max: 100)
+```
 
 **Output:**
 
 ```json
 {
-	"ok": true,
-	"data": {
-		"total_count": 123,
-		"items": [{"full_name": "owner/repo", "description": "..."}]
-	}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/search_repositories
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"query": "topic:mcp language:python",
-	"sort": "stars",
-	"order": "desc"
+  "total_count": 1200,
+  "items": [{ "full_name": "owner/repo", "stargazers_count": 500, ... }]
 }
 ```
 
 </details>
+
 
 <details>
 <summary><code>search_code</code> — Search code across GitHub</summary>
 
-Performs precise code search using GitHub query syntax.
+Searches code using GitHub's code search syntax.
 
 **Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `query` (string, required) — Code search query
-- `sort` (string, optional) — `indexed`
-- `order` (string, optional) — `asc` or `desc`
-- `page` (integer, optional) — Page number
-- `perPage` (integer, optional) — Items per page
+```
+- `query` (string, required) — Code search query (supports GitHub code search syntax)
+- `page` (int, optional) — Page number
+- `per_page` (int, optional) — Results per page (max: 100)
+```
 
 **Output:**
 
 ```json
 {
-	"ok": true,
-	"data": {
-		"total_count": 42,
-		"items": [{"repository": "owner/repo", "path": "src/main.py"}]
-	}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/search_code
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"query": "path:github_mcp class GitHubServiceError",
-	"page": 1,
-	"perPage": 20
+  "total_count": 45,
+  "items": [{ "name": "file.py", "repository": { "full_name": "owner/repo" }, ... }]
 }
 ```
 
 </details>
+
 
 <details>
 <summary><code>search_users</code> — Search GitHub users</summary>
 
-Finds users by profile attributes and query filters.
+Searches GitHub users by name, location, followers, or other criteria.
 
 **Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
+```
 - `query` (string, required) — User search query
-- `sort` (string, optional) — `followers`, `repositories`, `joined`
-- `order` (string, optional) — `asc` or `desc`
-- `page` (integer, optional) — Page number
-- `perPage` (integer, optional) — Items per page
+- `sort` (string, optional) — Sort by: followers, repositories, or joined
+- `order` (string, optional) — Sort direction: asc or desc
+- `page` (int, optional) — Page number
+- `per_page` (int, optional) — Results per page (max: 100)
+```
 
 **Output:**
 
 ```json
 {
-	"ok": true,
-	"data": {
-		"items": [{"login": "octocat", "profile_url": "https://github.com/octocat"}]
-	}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/search_users
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"query": "location:berlin followers:>100"
+  "total_count": 12,
+  "items": [{ "login": "username", "html_url": "...", "followers": 300 }]
 }
 ```
 
 </details>
+
 
 <details>
 <summary><code>search_issues</code> — Search issues and pull requests</summary>
 
-Searches issues/PRs globally or scoped to a repository.
+Searches issues (and PRs) across GitHub using search syntax.
 
 **Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `query` (string, required) — Issue search query
-- `sort` (string, optional) — `updated`, `created`, `comments`
-- `order` (string, optional) — `asc` or `desc`
-- `owner` (string, optional) — Repository owner (requires `repo`)
-- `repo` (string, optional) — Repository name (requires `owner`)
+```
+- `query` (string, required) — Issue search query (supports GitHub issue search syntax)
+- `sort` (string, optional) — Sort by: comments, reactions, created, updated
+- `order` (string, optional) — Sort direction: asc or desc
+- `page` (int, optional) — Page number
+- `per_page` (int, optional) — Results per page (max: 100)
+```
 
 **Output:**
 
 ```json
 {
-	"ok": true,
-	"data": {
-		"items": [{"number": 12, "title": "Bug report", "state": "open"}]
-	}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/search_issues
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"query": "is:open label:bug",
-	"owner": "github",
-	"repo": "docs"
+  "total_count": 8,
+  "items": [{ "title": "Bug: ...", "state": "open", "number": 42, ... }]
 }
 ```
 
 </details>
 
-<details>
-<summary><code>list_commits</code> — List repository commits</summary>
-
-Lists commits with optional filters such as author, date range, path, and SHA.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `sha` (string, optional) — Branch or commit SHA
-- `author` (string, optional) — Author login
-- `since` (string, optional) — ISO date
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": [
-		{"sha": "abc123", "message": "feat: add endpoint", "author": "octocat"}
-	]
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/list_commits
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "github",
-	"repo": "docs",
-	"page": 1,
-	"perPage": 30
-}
-```
-
-</details>
-
-<details>
-<summary><code>get_commit</code> — Get commit details</summary>
-
-Fetches one commit and optionally includes changed files in the response.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `sha` (string, required) — Commit SHA
-- `include_diff` (boolean, optional) — Include file diff data
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {
-		"sha": "abc123",
-		"message": "fix: handle null scope",
-		"files": [{"filename": "github_mcp/service.py", "status": "modified"}]
-	}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/get_commit
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "github",
-	"repo": "docs",
-	"sha": "abc123",
-	"include_diff": true
-}
-```
-
-</details>
-
-<details>
-<summary><code>list_issues</code> — List repository issues</summary>
-
-Returns issues with filters for state, labels, and pagination.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `state` (string, optional) — `open`, `closed`, `all`
-- `labels` (string, optional) — Comma-separated labels
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {
-		"issues": [{"number": 101, "title": "Improve docs", "state": "open"}],
-		"count": 1
-	}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/list_issues
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "github",
-	"repo": "docs",
-	"state": "open"
-}
-```
-
-</details>
-
-<details>
-<summary><code>get_issue</code> — Get issue details</summary>
-
-Retrieves full metadata for a single issue.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `issue_number` (integer, required) — Issue number
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {
-		"number": 101,
-		"title": "Improve docs",
-		"state": "open",
-		"labels": ["documentation"]
-	}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/get_issue
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo", "public_repo"]},
-	"owner": "github",
-	"repo": "docs",
-	"issue_number": 101
-}
-```
-
-</details>
-
-<details>
-<summary><code>get_issue_comments</code> — Get issue comments</summary>
-
-Lists comments on a single issue with pagination support.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `issue_number` (integer, required) — Issue number
-- `page` (integer, optional) — Page number
-- `perPage` (integer, optional) — Results per page
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {
-		"comments": [{"id": 1, "body": "Looks good", "user": "octocat"}],
-		"page": 1,
-		"per_page": 30
-	}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/get_issue_comments
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "github",
-	"repo": "docs",
-	"issue_number": 101
-}
-```
-
-</details>
-
-<details>
-<summary><code>create_issue</code> — Create issue</summary>
-
-Creates a repository issue with optional body, assignees, labels, and milestone.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `title` (string, required) — Issue title
-- `body` (string, optional) — Issue body
-- `labels` (array, optional) — Label names
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"id": 12345, "number": 102, "url": "https://github.com/owner/repo/issues/102"}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/create_issue
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "github",
-	"repo": "docs",
-	"title": "Add API pagination examples",
-	"labels": ["documentation"]
-}
-```
-
-</details>
-
-<details>
-<summary><code>add_issue_comment</code> — Add issue/PR comment</summary>
-
-Adds a markdown comment to an issue or pull request.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `issue_number` (integer, required) — Issue/PR number
-- `body` (string, required) — Comment body
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"id": 9876, "url": "https://github.com/owner/repo/issues/101#issuecomment-1"}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/add_issue_comment
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "github",
-	"repo": "docs",
-	"issue_number": 101,
-	"body": "Thanks, I can work on this."
-}
-```
-
-</details>
-
-<details>
-<summary><code>update_issue</code> — Update issue fields</summary>
-
-Updates issue title, body, state, labels, assignees, and milestone.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `issue_number` (integer, required) — Issue number
-- `state` (string, optional) — `open` or `closed`
-- `state_reason` (string, optional) — `completed` or `not_planned`
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"number": 101, "title": "Improve docs", "state": "closed"}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/update_issue
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "github",
-	"repo": "docs",
-	"issue_number": 101,
-	"state": "closed",
-	"state_reason": "completed"
-}
-```
-
-</details>
-
-<details>
-<summary><code>get_file_contents</code> — Get repository file/directory content</summary>
-
-Returns file content or directory listing for a path and ref.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `path` (string, optional) — File or directory path
-- `ref` (string, optional) — Branch, tag, or commit SHA
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"type": "file", "name": "README.md", "encoding": "base64"}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/get_file_contents
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "github",
-	"repo": "docs",
-	"path": "/README.md",
-	"ref": "main"
-}
-```
-
-</details>
-
-<details>
-<summary><code>list_org_repositories_by_contributor</code> — Find org repositories by contributor</summary>
-
-Finds organization repositories where one or more contributors have commit history.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `org` (string, required) — Organization login
-- `contributor_usernames` (string, required) — Comma-separated usernames
-- `repo_type` (string, optional) — `all`, `public`, or `private`
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"org": "github", "repositories": [{"name": "docs", "contributors": ["octocat"]}]}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/list_org_repositories_by_contributor
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo", "read:org"]},
-	"org": "github",
-	"contributor_usernames": "octocat,hubot",
-	"repo_type": "all"
-}
-```
-
-</details>
-
-<details>
-<summary><code>list_tags</code> — List repository tags</summary>
-
-Returns tag names, commit references, and archive URLs.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `page` (integer, optional) — Page number
-- `perPage` (integer, optional) — Results per page
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"tags": [{"name": "v1.0.0", "commit": {"sha": "abc123"}}]}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/list_tags
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "github",
-	"repo": "docs"
-}
-```
-
-</details>
-
-<details>
-<summary><code>get_tag</code> — Get tag details</summary>
-
-Fetches metadata for one git tag reference.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `tag` (string, required) — Tag name
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"ref": "refs/tags/v1.0.0", "object": {"sha": "abc123"}}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/get_tag
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "github",
-	"repo": "docs",
-	"tag": "v1.0.0"
-}
-```
-
-</details>
-
-<details>
-<summary><code>create_repository</code> — Create repository</summary>
-
-Creates a repository in a personal account or organization.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `name` (string, required) — Repository name
-- `description` (string, optional) — Repository description
-- `private` (boolean, optional) — Private visibility
-- `org` (string, optional) — Organization target
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"id": 2222, "full_name": "owner/new-repo", "private": true}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/create_repository
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"name": "cl-github-mcp-demo",
-	"description": "Demo repository",
-	"private": true,
-	"auto_init": true
-}
-```
-
-</details>
-
-<details>
-<summary><code>create_or_update_file</code> — Create or update a repository file</summary>
-
-Writes content to a file path, creating or updating with optional SHA protection.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `path` (string, required) — File path
-- `content` (string, required) — File content
-- `message` (string, required) — Commit message
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"content": {"path": "README.md"}, "commit": {"sha": "abc123"}}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/create_or_update_file
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "octocat",
-	"repo": "demo",
-	"path": "README.md",
-	"content": "# Demo",
-	"message": "docs: add readme"
-}
-```
-
-</details>
-
-<details>
-<summary><code>fork_repository</code> — Fork repository</summary>
-
-Forks a repository into the authenticated user account or specified organization.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Source owner
-- `repo` (string, required) — Source repository
-- `org` (string, optional) — Destination organization
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"full_name": "my-user/repo", "fork": true}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/fork_repository
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "github",
-	"repo": "docs"
-}
-```
-
-</details>
-
-<details>
-<summary><code>create_branch</code> — Create branch</summary>
-
-Creates a new branch from a specified SHA or the default branch head.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `branch_name` (string, required) — New branch name
-- `sha` (string, optional) — Base commit SHA
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"ref": "refs/heads/feature/new-api", "object": {"sha": "abc123"}}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/create_branch
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "octocat",
-	"repo": "demo",
-	"branch_name": "feature/new-api"
-}
-```
-
-</details>
-
-<details>
-<summary><code>push_files</code> — Push multiple files atomically</summary>
-
-Commits multiple file changes in one tree/commit update operation.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `files_json` (string, required) — JSON array of file path/content objects
-- `message` (string, required) — Commit message
-- `branch` (string, optional) — Target branch
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"commit_sha": "abc123", "branch": "main", "message": "chore: update files"}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/push_files
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "octocat",
-	"repo": "demo",
-	"files_json": "[{\"path\":\"docs/a.md\",\"content\":\"A\"},{\"path\":\"docs/b.md\",\"content\":\"B\"}]",
-	"message": "docs: add two files"
-}
-```
-
-</details>
-
-<details>
-<summary><code>pull_request_read</code> — Read pull request details</summary>
-
-Fetches PR data with method variants for files, status, comments, and review comments.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `pull_number` (integer, required) — Pull request number
-- `method` (string, optional) — `get`, `get_files`, `get_status`, `get_comments`, `get_review_comments`
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"number": 7, "title": "feat: add API", "state": "open"}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/pull_request_read
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "octocat",
-	"repo": "demo",
-	"pull_number": 7,
-	"method": "get_files"
-}
-```
-
-</details>
-
-<details>
-<summary><code>list_pull_requests</code> — List pull requests</summary>
-
-Lists pull requests with filter and sorting options.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `state` (string, optional) — `open`, `closed`, `all`
-- `sort` (string, optional) — `created`, `updated`, `popularity`, `long-running`
-- `direction` (string, optional) — `asc` or `desc`
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"pull_requests": [{"number": 7, "title": "feat: add API"}], "count": 1}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/list_pull_requests
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "octocat",
-	"repo": "demo",
-	"state": "open"
-}
-```
-
-</details>
 
 <details>
 <summary><code>search_pull_requests</code> — Search pull requests</summary>
 
-Searches pull requests using GitHub search syntax with optional repository scope.
+Searches pull requests across GitHub using search syntax.
 
 **Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `query` (string, required) — Search query
-- `sort` (string, optional) — Sort field
-- `order` (string, optional) — `asc` or `desc`
-- `owner` (string, optional) — Repository owner
-- `repo` (string, optional) — Repository name
+```
+- `query` (string, required) — PR search query (supports GitHub search syntax)
+- `sort` (string, optional) — Sort by: comments, reactions, created, updated
+- `order` (string, optional) — Sort direction: asc or desc
+- `page` (int, optional) — Page number
+- `per_page` (int, optional) — Results per page (max: 100)
+```
 
 **Output:**
 
 ```json
 {
-	"ok": true,
-	"data": {"items": [{"number": 7, "title": "feat: add API", "state": "open"}]}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/search_pull_requests
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"query": "is:pr is:open review:required",
-	"owner": "octocat",
-	"repo": "demo"
+  "total_count": 3,
+  "items": [{ "title": "Add feature", "state": "open", "number": 15, ... }]
 }
 ```
 
 </details>
 
-<details>
-<summary><code>create_pull_request</code> — Create pull request</summary>
 
-Creates a PR from head to base with optional draft mode and body.
+### Issue Operations
+
+<details>
+<summary><code>list_issues</code> — List repository issues</summary>
+
+Returns issues in a repository with optional state and label filtering.
 
 **Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
+```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `title` (string, required) — PR title
-- `head` (string, required) — Source branch
-- `base` (string, required) — Target branch
+- `state` (string, optional) — Issue state: open, closed, or all (default: open)
+- `labels` (string, optional) — Comma-separated label names to filter by
+- `assignee` (string, optional) — Filter by assignee username
+- `milestone` (string, optional) — Filter by milestone number or title
+- `page` (int, optional) — Page number
+- `per_page` (int, optional) — Results per page (max: 100)
+```
 
 **Output:**
 
 ```json
 {
-	"ok": true,
-	"data": {"number": 8, "url": "https://github.com/owner/repo/pull/8", "state": "open"}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/create_pull_request
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "octocat",
-	"repo": "demo",
-	"title": "feat: add docs",
-	"head": "feature/docs",
-	"base": "main"
+  "issues": [{ "number": 42, "title": "Bug report", "state": "open", ... }]
 }
 ```
 
 </details>
 
-<details>
-<summary><code>update_pull_request</code> — Update pull request</summary>
 
-Updates PR title, body, state, base branch, draft state, and reviewer requests.
+<details>
+<summary><code>get_issue</code> — Get a specific issue</summary>
+
+Returns full details of a single issue.
 
 **Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
+```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `pull_number` (integer, required) — Pull request number
-- `title` (string, optional) — Updated title
-- `state` (string, optional) — `open` or `closed`
+- `issue_number` (int, required) — Issue number
+```
 
 **Output:**
 
 ```json
 {
-	"ok": true,
-	"data": {"number": 8, "state": "open", "title": "feat: add docs v2"}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/update_pull_request
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "octocat",
-	"repo": "demo",
-	"pull_number": 8,
-	"title": "feat: add docs v2"
+  "number": 42,
+  "title": "Bug report",
+  "body": "...",
+  "state": "open",
+  "labels": [...],
+  ...
 }
 ```
 
 </details>
 
-<details>
-<summary><code>merge_pull_request</code> — Merge pull request</summary>
 
-Merges a PR with merge, squash, or rebase strategy.
+<details>
+<summary><code>get_issue_comments</code> — List comments on an issue</summary>
+
+Returns paginated comments for an issue or pull request.
 
 **Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
+```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `pull_number` (integer, required) — Pull request number
-- `merge_method` (string, optional) — `merge`, `squash`, `rebase`
+- `issue_number` (int, required) — Issue number
+- `page` (int, optional) — Page number
+- `per_page` (int, optional) — Results per page (max: 100)
+```
 
 **Output:**
 
 ```json
 {
-	"ok": true,
-	"data": {"merged": true, "sha": "abc123", "message": "Pull Request successfully merged"}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/merge_pull_request
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "octocat",
-	"repo": "demo",
-	"pull_number": 8,
-	"merge_method": "squash"
+  "comments": [{ "id": 1, "user": { "login": "..." }, "body": "..." }, ...]
 }
 ```
 
 </details>
 
-<details>
-<summary><code>update_pull_request_branch</code> — Update PR branch from base</summary>
 
-Updates the PR branch with latest changes from the base branch.
+<details>
+<summary><code>create_issue</code> — Create a new issue</summary>
+
+Creates a new issue in a repository.
 
 **Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
+```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `pull_number` (integer, required) — Pull request number
-- `expected_head_sha` (string, optional) — Concurrency guard SHA
+- `title` (string, required) — Issue title
+- `body` (string, optional) — Issue description (Markdown supported)
+- `assignees` (list, optional) — List of usernames to assign
+- `labels` (list, optional) — List of label names to apply
+- `milestone` (int, optional) — Milestone number to associate
+```
 
 **Output:**
 
 ```json
 {
-	"ok": true,
-	"data": {"message": "Branch update requested"}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/update_pull_request_branch
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "octocat",
-	"repo": "demo",
-	"pull_number": 8
+  "number": 43,
+  "title": "New issue",
+  "html_url": "https://github.com/owner/repo/issues/43",
+  ...
 }
 ```
 
 </details>
 
-<details>
-<summary><code>pull_request_review_write</code> — Write PR reviews and thread actions</summary>
 
-Creates, submits, and deletes pending reviews, and resolves/unresolves review threads.
+<details>
+<summary><code>add_issue_comment</code> — Add a comment to an issue</summary>
+
+Adds a comment to an issue or pull request.
 
 **Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
+```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `pull_number` (integer, required) — Pull request number
-- `method` (string, required) — `create`, `submit_pending`, `delete_pending`, `resolve_thread`, `unresolve_thread`
-- `event` (string, optional) — `APPROVE`, `REQUEST_CHANGES`, `COMMENT`
+- `issue_number` (int, required) — Issue or PR number
+- `body` (string, required) — Comment text (Markdown supported)
+```
 
 **Output:**
 
 ```json
 {
-	"ok": true,
-	"data": {"status": "review_updated", "pull_number": 8}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/pull_request_review_write
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "octocat",
-	"repo": "demo",
-	"pull_number": 8,
-	"method": "submit_pending",
-	"event": "APPROVE",
-	"body": "Looks good"
+  "id": 101,
+  "body": "Your comment here",
+  "user": { "login": "..." }
 }
 ```
 
 </details>
 
-<details>
-<summary><code>add_reply_to_pull_request_comment</code> — Reply to PR comment</summary>
 
-Adds a reply to an existing pull request review comment thread.
+<details>
+<summary><code>update_issue</code> — Update an existing issue</summary>
+
+Updates the title, body, state, assignees, labels, or milestone of an issue.
 
 **Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
+```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `pull_number` (integer, required) — Pull request number
-- `comment_id` (integer, required) — Comment ID to reply to
-- `body` (string, required) — Reply text
+- `issue_number` (int, required) — Issue number
+- `title` (string, optional) — New title
+- `body` (string, optional) — New body
+- `state` (string, optional) — New state: open or closed
+- `assignees` (list, optional) — Replacement list of assignees
+- `labels` (list, optional) — Replacement list of labels
+- `milestone` (int, optional) — Milestone number (or null to unset)
+```
 
 **Output:**
 
 ```json
 {
-	"ok": true,
-	"data": {"id": 1001, "body": "Thanks for the note"}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/add_reply_to_pull_request_comment
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "octocat",
-	"repo": "demo",
-	"pull_number": 8,
-	"comment_id": 100,
-	"body": "Addressed in latest commit"
+  "number": 42,
+  "state": "closed",
+  "title": "Updated title",
+  ...
 }
 ```
 
 </details>
 
-<details>
-<summary><code>get_latest_release</code> — Get latest release</summary>
-
-Returns the latest published release of a repository.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"tag_name": "v2.3.0", "name": "Release 2.3.0", "draft": false}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/get_latest_release
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "github",
-	"repo": "docs"
-}
-```
-
-</details>
-
-<details>
-<summary><code>list_releases</code> — List releases</summary>
-
-Lists repository releases with pagination.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `page` (integer, optional) — Page number
-- `per_page` (integer, optional) — Results per page
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"releases": [{"tag_name": "v2.3.0", "name": "Release 2.3.0"}], "count": 1}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/list_releases
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "github",
-	"repo": "docs",
-	"page": 1,
-	"per_page": 30
-}
-```
-
-</details>
-
-<details>
-<summary><code>get_release_by_tag</code> — Get release by tag</summary>
-
-Fetches one release by tag name.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `tag` (string, required) — Tag name
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"tag_name": "v2.3.0", "name": "Release 2.3.0", "url": "https://github.com/owner/repo/releases/tag/v2.3.0"}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/get_release_by_tag
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "github",
-	"repo": "docs",
-	"tag": "v2.3.0"
-}
-```
-
-</details>
-
-<details>
-<summary><code>get_label</code> — Get repository label</summary>
-
-Retrieves metadata for a specific repository label.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `name` (string, required) — Label name
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"name": "bug", "color": "d73a4a", "description": "Something is not working"}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/get_label
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "github",
-	"repo": "docs",
-	"name": "bug"
-}
-```
-
-</details>
-
-<details>
-<summary><code>get_me</code> — Get authenticated user</summary>
-
-Returns identity details for the token owner.
-
-**Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-
-**Output:**
-
-```json
-{
-	"ok": true,
-	"data": {"login": "octocat", "id": 1, "html_url": "https://github.com/octocat"}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/get_me
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": []}
-}
-```
-
-</details>
 
 <details>
 <summary><code>sub_issue_write</code> — Manage sub-issues</summary>
 
-Adds, removes, or reprioritizes sub-issues for a parent issue.
+Adds, removes, or reprioritizes sub-issues within a parent issue.
 
 **Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `issue_number` (integer, required) — Parent issue number
-- `method` (string, required) — `add`, `remove`, `reprioritize`
-- `sub_issue_id` (integer, required) — Sub-issue identifier
+```
+- `operation` (string, required) — Operation: add, remove, or reprioritize
+- `parent_issue_id` (int, required) — Node ID of the parent issue
+- `sub_issue_id` (int, optional) — Node ID of the sub-issue (for add/remove)
+- `after_id` (int, optional) — Sub-issue ID to insert after (for reprioritize)
+```
 
 **Output:**
 
 ```json
 {
-	"ok": true,
-	"data": {"status": "updated", "issue_number": 101}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/sub_issue_write
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "octocat",
-	"repo": "demo",
-	"issue_number": 101,
-	"method": "add",
-	"sub_issue_id": 202
+  "success": true,
+  "parent_issue": { "number": 10, "sub_issues_count": 3 }
 }
 ```
 
 </details>
+
+
+### Pull Request Operations
 
 <details>
-<summary><code>assign_copilot_to_issue</code> — Assign Copilot coding agent</summary>
+<summary><code>list_pull_requests</code> — List pull requests</summary>
 
-Assigns GitHub Copilot coding agent to work on an issue.
+Returns pull requests in a repository with optional filtering.
 
 **Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
+```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `issue_number` (integer, required) — Issue number
-- `base_ref` (string, optional) — Branch to start from
-- `custom_instructions` (string, optional) — Extra agent instructions
+- `state` (string, optional) — PR state: open, closed, or all (default: open)
+- `head` (string, optional) — Filter by head branch (format: user:branch)
+- `base` (string, optional) — Filter by base branch
+- `sort` (string, optional) — Sort by: created, updated, popularity, long-running
+- `direction` (string, optional) — Sort direction: asc or desc
+- `page` (int, optional) — Page number
+- `per_page` (int, optional) — Results per page (max: 100)
+```
 
 **Output:**
 
 ```json
 {
-	"ok": true,
-	"data": {"issue_number": 101, "status": "assigned", "pull_request_url": null}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/assign_copilot_to_issue
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "octocat",
-	"repo": "demo",
-	"issue_number": 101,
-	"base_ref": "main"
+  "pull_requests": [{ "number": 15, "title": "Feature", "state": "open", ... }]
 }
 ```
 
 </details>
+
 
 <details>
-<summary><code>request_copilot_review</code> — Request Copilot PR review</summary>
+<summary><code>pull_request_read</code> — Get pull request data</summary>
 
-Requests an automated Copilot review on a pull request.
+Retrieves PR details, changed files, status checks, comments, or reviews depending on the operation.
 
 **Inputs:**
-
-- `oauth_token` (object, required) — GitHub token payload
+```
+- `operation` (string, required) — What to retrieve: details, files, status, comments, or reviews
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `pull_number` (integer, required) — Pull request number
+- `pull_number` (int, required) — Pull request number
+```
 
 **Output:**
 
 ```json
 {
-	"ok": true,
-	"data": {"pull_number": 8, "status": "review_requested"}
-}
-```
-
-**Usage Example:**
-
-```bash
-POST /mcp/cl-github-mcp-server/request_copilot_review
-
-{
-	"oauth_token": {"token": "${GITHUB_TOKEN}", "scopes": ["repo"]},
-	"owner": "octocat",
-	"repo": "demo",
-	"pull_number": 8
+  "number": 15,
+  "title": "Add feature",
+  "state": "open",
+  "mergeable": true,
+  ...
 }
 ```
 
 </details>
 
----
+
+<details>
+<summary><code>create_pull_request</code> — Create a pull request</summary>
+
+Creates a new pull request from a head branch into a base branch.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `title` (string, required) — PR title
+- `head` (string, required) — Branch with changes (format: username:branch or just branch)
+- `base` (string, required) — Branch to merge into
+- `body` (string, optional) — PR description (Markdown supported)
+- `draft` (bool, optional) — Create as draft PR (default: false)
+- `maintainer_can_modify` (bool, optional) — Allow maintainers to push to head branch
+```
+
+**Output:**
+
+```json
+{
+  "number": 16,
+  "html_url": "https://github.com/owner/repo/pull/16",
+  "state": "open",
+  ...
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>update_pull_request</code> — Update a pull request</summary>
+
+Updates the title, body, state, or base branch of a pull request.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `pull_number` (int, required) — Pull request number
+- `title` (string, optional) — New title
+- `body` (string, optional) — New description
+- `state` (string, optional) — New state: open or closed
+- `base` (string, optional) — New base branch
+```
+
+**Output:**
+
+```json
+{
+  "number": 16,
+  "title": "Updated PR title",
+  "state": "open"
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>merge_pull_request</code> — Merge a pull request</summary>
+
+Merges a pull request using the specified merge method.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `pull_number` (int, required) — Pull request number
+- `commit_title` (string, optional) — Title for the merge commit
+- `commit_message` (string, optional) — Message for the merge commit
+- `merge_method` (string, optional) — Merge method: merge, squash, or rebase (default: merge)
+```
+
+**Output:**
+
+```json
+{
+  "merged": true,
+  "message": "Pull Request successfully merged",
+  "sha": "merge-commit-sha"
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>update_pull_request_branch</code> — Update a PR branch with latest base</summary>
+
+Updates a pull request branch with the latest changes from the base branch.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `pull_number` (int, required) — Pull request number
+```
+
+**Output:**
+
+```json
+{
+  "message": "Updating pull request branch.",
+  "url": "..."
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>pull_request_review_write</code> — Manage PR reviews</summary>
+
+Creates, submits, deletes reviews, or resolves review threads on a pull request.
+
+**Inputs:**
+```
+- `operation` (string, required) — Operation: create, submit, delete, or resolve_thread
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `pull_number` (int, required) — Pull request number
+- `review_id` (int, optional) — Review ID (required for submit/delete)
+- `body` (string, optional) — Review comment body
+- `event` (string, optional) — Review event: APPROVE, REQUEST_CHANGES, or COMMENT
+- `thread_id` (string, optional) — Thread ID to resolve
+```
+
+**Output:**
+
+```json
+{
+  "id": 200,
+  "state": "APPROVED",
+  "body": "LGTM!"
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>add_reply_to_pull_request_comment</code> — Reply to a PR review comment</summary>
+
+Adds a reply to an existing review comment on a pull request.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `pull_number` (int, required) — Pull request number
+- `comment_id` (int, required) — ID of the comment to reply to
+- `body` (string, required) — Reply text (Markdown supported)
+```
+
+**Output:**
+
+```json
+{
+  "id": 202,
+  "body": "Reply text",
+  "user": { "login": "..." }
+}
+```
+
+</details>
+
+
+### Releases & Tags
+
+<details>
+<summary><code>list_tags</code> — List repository tags</summary>
+
+Returns a paginated list of tags in a repository.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `page` (int, optional) — Page number
+- `per_page` (int, optional) — Results per page (max: 100)
+```
+
+**Output:**
+
+```json
+{
+  "tags": [{ "name": "v1.0.0", "commit": { "sha": "abc123" } }, ...]
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>get_tag</code> — Get a specific tag</summary>
+
+Returns details about a specific tag in a repository.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `tag` (string, required) — Tag name
+```
+
+**Output:**
+
+```json
+{
+  "name": "v1.0.0",
+  "commit": { "sha": "abc123" },
+  ...
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>list_releases</code> — List repository releases</summary>
+
+Returns a list of releases published in a repository.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `page` (int, optional) — Page number
+- `per_page` (int, optional) — Results per page (max: 100)
+```
+
+**Output:**
+
+```json
+{
+  "releases": [{ "tag_name": "v1.0.0", "name": "First release", "body": "..." }, ...]
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>get_release_by_tag</code> — Get a release by tag</summary>
+
+Returns the release associated with a specific tag.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `tag` (string, required) — Tag name of the release
+```
+
+**Output:**
+
+```json
+{
+  "tag_name": "v1.2.0",
+  "name": "Release v1.2.0",
+  "body": "Release notes...",
+  ...
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>get_latest_release</code> — Get the latest release</summary>
+
+Returns the most recent non-prerelease, non-draft release in a repository.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+```
+
+**Output:**
+
+```json
+{
+  "tag_name": "v2.0.0",
+  "name": "Latest stable",
+  "published_at": "2024-01-01T00:00:00Z",
+  ...
+}
+```
+
+</details>
+
+
+### User & Organization Operations
+
+<details>
+<summary><code>get_me</code> — Get authenticated user info</summary>
+
+Returns information about the currently authenticated GitHub user.
+
+**Inputs:**
+```
+None
+```
+
+**Output:**
+
+```json
+{
+  "login": "your-username",
+  "name": "Your Name",
+  "email": "you@example.com",
+  ...
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>get_label</code> — Get a repository label</summary>
+
+Returns details about a specific label in a repository.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `name` (string, required) — Label name
+```
+
+**Output:**
+
+```json
+{
+  "name": "bug",
+  "color": "d73a4a",
+  "description": "Something isn't working"
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>list_org_repositories_by_contributor</code> — Find org repos by contributor</summary>
+
+Lists repositories within an organization where a specific user has contributed.
+
+**Inputs:**
+```
+- `org` (string, required) — Organization name
+- `username` (string, required) — GitHub username to search for contributions
+```
+
+**Output:**
+
+```json
+{
+  "repositories": [{ "name": "repo-name", "full_name": "org/repo-name", ... }]
+}
+```
+
+</details>
+
+
+### GitHub Copilot Operations
+
+<details>
+<summary><code>assign_copilot_to_issue</code> — Assign Copilot to an issue</summary>
+
+Assigns GitHub Copilot as an assignee to work on an issue, with optional custom instructions.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `issue_number` (int, required) — Issue number
+- `instructions` (string, optional) — Custom instructions for Copilot
+```
+
+**Output:**
+
+```json
+{
+  "success": true,
+  "issue_number": 42,
+  "assignee": "copilot"
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>request_copilot_review</code> — Request a Copilot PR review</summary>
+
+Requests GitHub Copilot to review a pull request.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `pull_number` (int, required) — Pull request number
+```
+
+**Output:**
+
+```json
+{
+  "success": true,
+  "pull_number": 16,
+  "reviewer": "copilot"
+}
+```
+
+</details>
+
 
 ## API Parameters Reference
 
 <details>
-<summary><strong>Common Parameters</strong></summary>
+<summary><strong>Pagination Parameters</strong></summary>
 
-- `oauth_token` — Structured token object with `token` and optional `scopes` list
-- `owner` — GitHub repository owner or organization login
-- `repo` — Repository name
-- `page` / `perPage` / `per_page` — Pagination controls used by listing/search tools
-- `method` — Operation selector for multiplexed tools (for example PR read/review operations)
+Most list endpoints support pagination:
+
+- `page` — Page number (starting from 1)
+- `per_page` — Results per page (default: 30, max: 100)
 
 </details>
 
 <details>
-<summary><strong>Resource Formats</strong></summary>
+<summary><strong>GitHub Search Syntax</strong></summary>
 
-**Repository Resource:**
-
-```
-owner/repo
-Example: github/docs
-```
-
-**Branch Reference:**
+Search tools support GitHub's full query syntax:
 
 ```
-refs/heads/{branch_name}
-Example: refs/heads/main
+language:python stars:>1000        — Repos with Python, 1000+ stars
+repo:owner/repo is:open label:bug  — Open bug issues in a specific repo
+author:username created:>2024-01-01 — Commits by author after date
 ```
 
-**Issue / Pull Request Number:**
-
-```
-integer identifier
-Example: 101
-```
-
-**File Path Resource:**
-
-```
-/{path}
-Example: /README.md
-```
+Full syntax reference: [GitHub Search Documentation](https://docs.github.com/en/search-github/searching-on-github)
 
 </details>
-
----
-
-## Authentication Guide
 
 <details>
-<summary><strong>OAuth / API Key Setup</strong></summary>
+<summary><strong>Date/Time Format</strong></summary>
 
-All tools require GitHub authentication. You can use a GitHub personal access token, or generate OAuth tokens with the included helper script.
+All datetime parameters use ISO 8601 format:
 
-### Step 1: Create GitHub OAuth App
-
-1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
-2. Open **OAuth Apps** and click **New OAuth App**
-3. Set **Authorization callback URL** to `http://127.0.0.1:3000/callback`
-
-### Step 2: Configure Credentials
-
-1. Add credentials to environment variables:
-2. `GITHUB_CLIENT_ID=...`
-3. `GITHUB_CLIENT_SECRET=...`
-4. Optional: `GITHUB_SCOPES=repo,read:org`
-
-### Step 3: Authenticate
-
-Run the OAuth helper script from project root:
-
-```bash
-python3 oauth_script.py
 ```
-
-The script opens the browser, handles callback locally, exchanges the code, and prints token JSON.
-
-Refer to [GitHub OAuth Docs](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps) for details.
-
-### Step 4: Required Scopes
-
-Ensure your token has these scopes:
-
-- `repo` — Required by the repository, file, issue, PR, release, and Copilot tools
-- `read:org` — Recommended for organization contributor discovery workflows
-- `public_repo` — Optional for public-only issue/comment reads
+Format: YYYY-MM-DDTHH:MM:SSZ
+Example: 2024-01-15T10:30:00Z
+```
 
 </details>
 
----
 
 ## Troubleshooting
 
 <details>
-<summary><strong>Common Issues & Solutions</strong></summary>
+<summary><strong>Missing or Invalid Headers</strong></summary>
 
-### **Missing or Invalid Token**
-
-- **Cause:** `oauth_token.token` missing or malformed
+- **Cause:** OAuth token not provided in request headers or incorrect format
 - **Solution:**
-	1. Provide `oauth_token` as `{ "token": "...", "scopes": [...] }`
-	2. Verify the token is active in GitHub settings
-	3. Re-run OAuth flow or generate a new PAT
-
-### **Missing Scope Error**
-
-- **Cause:** Token does not include required scope (`repo` in most tools)
-- **Solution:**
-	1. Regenerate token with required scopes
-	2. Pass the granted scopes list in `oauth_token.scopes`
-	3. Retry the request and confirm `scope_check` in `meta`
-
-### **Malformed Request Payload**
-
-- **Cause:** Invalid JSON or wrong field names/types
-- **Solution:**
-	1. Validate JSON syntax
-	2. Ensure required fields are provided
-	3. Match parameter casing (for example `perPage` vs `per_page`) by tool schema
-
-### **GitHub API Forbidden (403)**
-
-- **Cause:** Scope restrictions, organization policy, or branch protection
-- **Solution:**
-	1. Check token scopes and org permissions
-	2. Validate branch protection rules for write/merge operations
-	3. Retry with sufficient repository permissions
-
-### **OAuth Callback Timeout**
-
-- **Cause:** OAuth browser approval not completed within timeout
-- **Solution:**
-	1. Ensure callback URL is exactly `http://127.0.0.1:3000/callback`
-	2. Re-run `python3 oauth_script.py`
-	3. Approve authorization promptly in browser
+  1. Verify `Authorization: Bearer YOUR_TOKEN` and `X-Mewcp-Credential-Id: CREDENTIAL-ID` headers are present
+  2. Check your GitHub OAuth credential is active in your MewCP account
 
 </details>
-
----
-
-## Resources
 
 <details>
-<summary><strong>External Documentation</strong></summary>
+<summary><strong>Insufficient Credits</strong></summary>
 
-- **[GitHub REST API Documentation](https://docs.github.com/en/rest)** — Official GitHub REST API reference
-- **[GitHub OAuth Apps Guide](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps)** — OAuth setup and authorization flow
-- **[FastMCP Docs](https://gofastmcp.com/v2/getting-started/welcome)** — FastMCP framework documentation
+- **Cause:** API calls have exceeded your request limits
+- **Solution:**
+  1. Check credit usage in your Curious Layer dashboard
+  2. Upgrade to a paid plan or add credits for higher limits
+  3. Contact support for credit adjustments
+
+</details>
+
+<details>
+<summary><strong>Credential Not Connected</strong></summary>
+
+- **Cause:** No GitHub credential linked to your account
+- **Solution:**
+  1. Go to **Credentials** in your MewCP dashboard
+  2. Connect your GitHub account via OAuth
+  3. Retry the request with the correct `X-Mewcp-Credential-Id` header
+
+</details>
+
+<details>
+<summary><strong>Malformed Request Payload</strong></summary>
+
+- **Cause:** JSON payload is invalid or missing required fields
+- **Solution:**
+  1. Validate JSON syntax before sending
+  2. Ensure all required tool parameters (owner, repo, etc.) are included
+  3. Check parameter types match expected values
+
+</details>
+
+<details>
+<summary><strong>Server Not Found</strong></summary>
+
+- **Cause:** Incorrect server name in the API endpoint
+- **Solution:**
+  1. Verify endpoint format: `{server-name}/mcp/{tool-name}`
+  2. Use correct server name from documentation
+  3. Check available servers in your Curious Layer account
+
+</details>
+
+<details>
+<summary><strong>GitHub API Error</strong></summary>
+
+- **Cause:** Upstream GitHub API returned an error
+- **Solution:**
+  1. Check GitHub service status at [GitHub Status](https://githubstatus.com)
+  2. Verify your OAuth token has the required scopes for the operation (e.g. `repo`, `read:org`)
+  3. Review the error message returned in the response for specific details
 
 </details>
 
 ---
+
+### Resources
+
+- **[GitHub REST API Documentation](https://docs.github.com/en/rest)** — Official API reference
+- **[GitHub Search Syntax](https://docs.github.com/en/search-github/searching-on-github)** — Complete search query reference
+- **[FastMCP Docs](https://gofastmcp.com/v2/getting-started/welcome)** — FastMCP specification
+- **[FastMCP Credentials](https://pypi.org/project/fastmcp-credentials/)** — FastMCP Credentials package for credential handling
