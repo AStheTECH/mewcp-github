@@ -27,6 +27,7 @@ from .service import (
     get_repo as get_repo_service,
     get_tag,
     list_branches,
+    update_repository,
     list_commits,
     list_issues,
     list_org_repositories_by_contributor,
@@ -88,6 +89,60 @@ def register_tools(mcp: FastMCP) -> None:
                     "get_repo",
                     code="INTERNAL_ERROR",
                     message="Unexpected error while processing get_repo.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="update_repository",
+        description="Update repository metadata or rename a repository.",
+    )
+    def update_repository_tool(
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        name: str | None = Field(None, description="New repository name (to rename)"),
+        description: str | None = Field(None, description="Repository description"),
+        private: bool | None = Field(
+            None, description="Make repository private/public"
+        ),
+        default_branch: str | None = Field(None, description="Default branch name"),
+    ) -> str:
+        try:
+            data = update_repository(
+                owner=owner,
+                repo=repo,
+                name=name,
+                description=description,
+                private=private,
+                default_branch=default_branch,
+            )
+            return json.dumps(
+                success_response(
+                    "update_repository",
+                    data,
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed update_repository for %s/%s: %s", owner, repo, exc.message
+            )
+            return json.dumps(
+                error_response(
+                    "update_repository",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error("Failed update_repository for %s/%s: %s", owner, repo, exc)
+            return json.dumps(
+                error_response(
+                    "update_repository",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while updating repository.",
                     details={"exception": str(exc)},
                 )
             )

@@ -28,7 +28,6 @@ class GitHubServiceError(Exception):
         self.details = details or {}
 
 
-
 def _validate_required_scopes(
     granted_scopes: list[str], required_scopes: list[str]
 ) -> None:
@@ -268,6 +267,54 @@ def create_repository(
         "owner": payload.get("owner"),
         "private": payload.get("private"),
         "created_at": payload.get("created_at"),
+    }
+
+
+def update_repository(
+    owner: str,
+    repo: str,
+    name: str | None = None,
+    description: str | None = None,
+    private: bool | None = None,
+    default_branch: str | None = None,
+) -> dict[str, Any]:
+    """Update repository metadata (including renaming the repository).
+
+    At least one field must be provided. To rename a repository, pass `name`.
+    """
+    request_body: dict[str, Any] = {}
+    if name is not None:
+        request_body["name"] = name
+    if description is not None:
+        request_body["description"] = description
+    if private is not None:
+        request_body["private"] = private
+    if default_branch is not None:
+        request_body["default_branch"] = default_branch
+
+    if not request_body:
+        raise GitHubServiceError(
+            code="INVALID_INPUT",
+            message="At least one field (name, description, private, default_branch) must be provided",
+            http_status=400,
+            retryable=False,
+        )
+
+    payload = _github_api_request(
+        method="PATCH",
+        path=f"/repos/{owner}/{repo}",
+        json_body=request_body,
+        required_scopes=["repo"],
+    )
+
+    return {
+        "id": payload.get("id"),
+        "name": payload.get("name"),
+        "full_name": payload.get("full_name"),
+        "html_url": payload.get("html_url"),
+        "private": payload.get("private"),
+        "description": payload.get("description"),
+        "default_branch": payload.get("default_branch"),
     }
 
 
