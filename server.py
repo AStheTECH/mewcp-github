@@ -14,11 +14,11 @@ configure_logging()
 logger = logging.getLogger("github-mcp-server")
 
 backend = HeaderCredentialBackend()
-mcp = FastMCP("CL GitHub MCP Server", middleware=[CredentialMiddleware(backend, "oauth")])
+mcp = FastMCP("MewCP GitHub MCP Server", # stateless_http=True, middleware=[CredentialMiddleware(backend, "oauth")])
 register_tools(mcp)
 
 # Expose ASGI app for hosted runtimes.
-app = mcp.http_app(path="/mcp", transport="streamable-http")
+app = mcp.http_app(path="/mcp", transport="streamable-http", stateless_http=True)
 
 
 if __name__ == "__main__":
