@@ -14,7 +14,9 @@ configure_logging()
 logger = logging.getLogger("github-mcp-server")
 
 backend = HeaderCredentialBackend()
-mcp = FastMCP("MewCP GitHub MCP Server", # stateless_http=True, middleware=[CredentialMiddleware(backend, "oauth")])
+mcp = FastMCP(
+    "MewCP GitHub MCP Server", middleware=[CredentialMiddleware(backend, "oauth")]
+)
 register_tools(mcp)
 
 # Expose ASGI app for hosted runtimes.
