@@ -47,6 +47,17 @@ from .service import (
     update_issue,
     update_pull_request,
     update_pull_request_branch,
+    get_branch_protection,
+    set_branch_protection,
+    delete_branch_protection,
+    get_pull_request_review_protection,
+    update_pull_request_review_protection,
+    delete_pull_request_review_protection,
+    list_repository_rulesets,
+    get_repository_ruleset,
+    create_repository_ruleset,
+    update_repository_ruleset,
+    delete_repository_ruleset,
 )
 
 logger = logging.getLogger("github-mcp-server")
@@ -2478,6 +2489,692 @@ def register_tools(mcp: FastMCP) -> None:
                     "request_copilot_review",
                     code="INTERNAL_ERROR",
                     message="Unexpected error while requesting Copilot review.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    # ── Branch Protection ──────────────────────────────────────────────────────
+
+    @mcp.tool(
+        name="get_branch_protection",
+        description="Get branch protection rules for a specific branch.",
+    )
+    def get_branch_protection_tool(
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        branch: str = Field(..., description="Branch name"),
+    ) -> str:
+        try:
+            data = get_branch_protection(owner, repo, branch)
+            return json.dumps(success_response("get_branch_protection", data))
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed get_branch_protection for %s/%s:%s: %s",
+                owner, repo, branch, exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "get_branch_protection",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed get_branch_protection for %s/%s:%s: %s",
+                owner, repo, branch, exc,
+            )
+            return json.dumps(
+                error_response(
+                    "get_branch_protection",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while getting branch protection.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="set_branch_protection",
+        description=(
+            "Create or replace branch protection rules for a branch (PUT). "
+            "Pass complex nested objects (required_status_checks, required_pull_request_reviews, restrictions) "
+            "as JSON strings; set to 'null' (the string) to clear them."
+        ),
+    )
+    def set_branch_protection_tool(
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        branch: str = Field(..., description="Branch name to protect"),
+        enforce_admins: bool = Field(
+            ..., description="Enforce rules for administrators"
+        ),
+        required_status_checks_json: str | None = Field(
+            None,
+            description=(
+                'JSON string for required status checks or null to disable. '
+                'Example: \'{"strict": true, "contexts": ["ci/test"]}\''
+            ),
+        ),
+        required_pull_request_reviews_json: str | None = Field(
+            None,
+            description=(
+                'JSON string for PR review requirements or null to disable. '
+                'Example: \'{"required_approving_review_count": 1, "dismiss_stale_reviews": true, '
+                '"require_code_owner_reviews": false, "require_last_push_approval": false}\''
+            ),
+        ),
+        restrictions_json: str | None = Field(
+            None,
+            description=(
+                'JSON string restricting push access or null for no restrictions. '
+                'Example: \'{"users": ["octocat"], "teams": ["ops"], "apps": []}\''
+            ),
+        ),
+        required_linear_history: bool = Field(
+            False, description="Require linear commit history"
+        ),
+        allow_force_pushes: bool | None = Field(
+            None, description="Allow force pushes (null uses GitHub default)"
+        ),
+        allow_deletions: bool = Field(False, description="Allow branch deletion"),
+        block_creations: bool = Field(
+            False, description="Block matching ref creation"
+        ),
+        required_conversation_resolution: bool = Field(
+            False, description="Require all conversations resolved before merge"
+        ),
+        lock_branch: bool = Field(False, description="Mark branch as read-only"),
+        allow_fork_syncing: bool = Field(
+            False, description="Allow forks to sync with upstream"
+        ),
+    ) -> str:
+        try:
+            import json as _json
+
+            required_status_checks = (
+                _json.loads(required_status_checks_json)
+                if required_status_checks_json
+                else None
+            )
+            required_pull_request_reviews = (
+                _json.loads(required_pull_request_reviews_json)
+                if required_pull_request_reviews_json
+                else None
+            )
+            restrictions = (
+                _json.loads(restrictions_json) if restrictions_json else None
+            )
+
+            data = set_branch_protection(
+                owner=owner,
+                repo=repo,
+                branch=branch,
+                enforce_admins=enforce_admins,
+                required_status_checks=required_status_checks,
+                required_pull_request_reviews=required_pull_request_reviews,
+                restrictions=restrictions,
+                required_linear_history=required_linear_history,
+                allow_force_pushes=allow_force_pushes,
+                allow_deletions=allow_deletions,
+                block_creations=block_creations,
+                required_conversation_resolution=required_conversation_resolution,
+                lock_branch=lock_branch,
+                allow_fork_syncing=allow_fork_syncing,
+            )
+            return json.dumps(success_response("set_branch_protection", data))
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed set_branch_protection for %s/%s:%s: %s",
+                owner, repo, branch, exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "set_branch_protection",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed set_branch_protection for %s/%s:%s: %s",
+                owner, repo, branch, exc,
+            )
+            return json.dumps(
+                error_response(
+                    "set_branch_protection",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while setting branch protection.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="delete_branch_protection",
+        description="Delete all branch protection rules for a specific branch.",
+    )
+    def delete_branch_protection_tool(
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        branch: str = Field(..., description="Branch name"),
+    ) -> str:
+        try:
+            data = delete_branch_protection(owner, repo, branch)
+            return json.dumps(success_response("delete_branch_protection", data))
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed delete_branch_protection for %s/%s:%s: %s",
+                owner, repo, branch, exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "delete_branch_protection",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed delete_branch_protection for %s/%s:%s: %s",
+                owner, repo, branch, exc,
+            )
+            return json.dumps(
+                error_response(
+                    "delete_branch_protection",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while deleting branch protection.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="get_pull_request_review_protection",
+        description="Get the PR review requirements for a protected branch.",
+    )
+    def get_pr_review_protection_tool(
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        branch: str = Field(..., description="Branch name"),
+    ) -> str:
+        try:
+            data = get_pull_request_review_protection(owner, repo, branch)
+            return json.dumps(
+                success_response("get_pull_request_review_protection", data)
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed get_pull_request_review_protection for %s/%s:%s: %s",
+                owner, repo, branch, exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "get_pull_request_review_protection",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed get_pull_request_review_protection for %s/%s:%s: %s",
+                owner, repo, branch, exc,
+            )
+            return json.dumps(
+                error_response(
+                    "get_pull_request_review_protection",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while getting PR review protection.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="update_pull_request_review_protection",
+        description=(
+            "Update PR review requirements for a protected branch (PATCH). "
+            "Only provided fields are updated."
+        ),
+    )
+    def update_pr_review_protection_tool(
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        branch: str = Field(..., description="Branch name"),
+        dismiss_stale_reviews: bool | None = Field(
+            None,
+            description="Dismiss approved reviews when new commits are pushed",
+        ),
+        require_code_owner_reviews: bool | None = Field(
+            None, description="Require review from code owners"
+        ),
+        required_approving_review_count: int | None = Field(
+            None, description="Number of approvals required (0–6)"
+        ),
+        require_last_push_approval: bool | None = Field(
+            None,
+            description="Require approval from someone other than the last pusher",
+        ),
+        dismissal_restrictions_json: str | None = Field(
+            None,
+            description=(
+                'JSON string specifying who can dismiss stale reviews. '
+                'Example: \'{"users": ["octocat"], "teams": ["ops"]}\''
+            ),
+        ),
+    ) -> str:
+        try:
+            import json as _json
+
+            dismissal_restrictions = (
+                _json.loads(dismissal_restrictions_json)
+                if dismissal_restrictions_json
+                else None
+            )
+
+            data = update_pull_request_review_protection(
+                owner=owner,
+                repo=repo,
+                branch=branch,
+                dismiss_stale_reviews=dismiss_stale_reviews,
+                require_code_owner_reviews=require_code_owner_reviews,
+                required_approving_review_count=required_approving_review_count,
+                require_last_push_approval=require_last_push_approval,
+                dismissal_restrictions=dismissal_restrictions,
+            )
+            return json.dumps(
+                success_response("update_pull_request_review_protection", data)
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed update_pull_request_review_protection for %s/%s:%s: %s",
+                owner, repo, branch, exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "update_pull_request_review_protection",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed update_pull_request_review_protection for %s/%s:%s: %s",
+                owner, repo, branch, exc,
+            )
+            return json.dumps(
+                error_response(
+                    "update_pull_request_review_protection",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while updating PR review protection.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="delete_pull_request_review_protection",
+        description="Remove PR review requirements from a protected branch.",
+    )
+    def delete_pr_review_protection_tool(
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        branch: str = Field(..., description="Branch name"),
+    ) -> str:
+        try:
+            data = delete_pull_request_review_protection(owner, repo, branch)
+            return json.dumps(
+                success_response("delete_pull_request_review_protection", data)
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed delete_pull_request_review_protection for %s/%s:%s: %s",
+                owner, repo, branch, exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "delete_pull_request_review_protection",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed delete_pull_request_review_protection for %s/%s:%s: %s",
+                owner, repo, branch, exc,
+            )
+            return json.dumps(
+                error_response(
+                    "delete_pull_request_review_protection",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while deleting PR review protection.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    # ── Repository Rulesets ────────────────────────────────────────────────────
+
+    @mcp.tool(
+        name="list_repository_rulesets",
+        description="List all rulesets defined for a repository.",
+    )
+    def list_repository_rulesets_tool(
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        includes_parents: bool = Field(
+            True,
+            description="Include rulesets inherited from the parent organization",
+        ),
+        page: int = Field(1, description="Page number"),
+        perPage: int = Field(30, description="Items per page"),
+    ) -> str:
+        try:
+            data = list_repository_rulesets(
+                owner, repo, includes_parents=includes_parents, per_page=perPage, page=page
+            )
+            return json.dumps(
+                success_response(
+                    "list_repository_rulesets",
+                    data,
+                    meta={"pagination": {"page": page, "perPage": perPage}},
+                )
+            )
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed list_repository_rulesets for %s/%s: %s",
+                owner, repo, exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "list_repository_rulesets",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed list_repository_rulesets for %s/%s: %s", owner, repo, exc
+            )
+            return json.dumps(
+                error_response(
+                    "list_repository_rulesets",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while listing rulesets.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="get_repository_ruleset",
+        description="Get a specific ruleset by ID for a repository.",
+    )
+    def get_repository_ruleset_tool(
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        ruleset_id: int = Field(..., description="Ruleset ID"),
+    ) -> str:
+        try:
+            data = get_repository_ruleset(owner, repo, ruleset_id)
+            return json.dumps(success_response("get_repository_ruleset", data))
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed get_repository_ruleset for %s/%s#%d: %s",
+                owner, repo, ruleset_id, exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "get_repository_ruleset",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed get_repository_ruleset for %s/%s#%d: %s",
+                owner, repo, ruleset_id, exc,
+            )
+            return json.dumps(
+                error_response(
+                    "get_repository_ruleset",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while getting ruleset.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="create_repository_ruleset",
+        description=(
+            "Create a new ruleset for a repository. "
+            "Pass conditions, rules, and bypass_actors as JSON strings."
+        ),
+    )
+    def create_repository_ruleset_tool(
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        name: str = Field(..., description="Ruleset name"),
+        enforcement: str = Field(
+            ..., description="Enforcement level: active, evaluate, or disabled"
+        ),
+        target: str = Field(
+            "branch", description="Target type: branch, tag, or push"
+        ),
+        conditions_json: str | None = Field(
+            None,
+            description=(
+                'JSON string for ref conditions. '
+                'Example: \'{"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}}\''
+            ),
+        ),
+        rules_json: str | None = Field(
+            None,
+            description=(
+                'JSON array of rule objects. '
+                'Example: \'[{"type": "pull_request", "parameters": {"required_approving_review_count": 1}}]\''
+            ),
+        ),
+        bypass_actors_json: str | None = Field(
+            None,
+            description=(
+                'JSON array of bypass actor objects. '
+                'Example: \'[{"actor_id": 1, "actor_type": "Team", "bypass_mode": "always"}]\''
+            ),
+        ),
+    ) -> str:
+        try:
+            import json as _json
+
+            conditions = _json.loads(conditions_json) if conditions_json else None
+            rules = _json.loads(rules_json) if rules_json else None
+            bypass_actors = (
+                _json.loads(bypass_actors_json) if bypass_actors_json else None
+            )
+
+            data = create_repository_ruleset(
+                owner=owner,
+                repo=repo,
+                name=name,
+                enforcement=enforcement,
+                target=target,
+                conditions=conditions,
+                rules=rules,
+                bypass_actors=bypass_actors,
+            )
+            return json.dumps(success_response("create_repository_ruleset", data))
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed create_repository_ruleset for %s/%s: %s",
+                owner, repo, exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "create_repository_ruleset",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed create_repository_ruleset for %s/%s: %s", owner, repo, exc
+            )
+            return json.dumps(
+                error_response(
+                    "create_repository_ruleset",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while creating ruleset.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="update_repository_ruleset",
+        description=(
+            "Update an existing ruleset for a repository (PUT — replaces the full ruleset). "
+            "Pass conditions, rules, and bypass_actors as JSON strings."
+        ),
+    )
+    def update_repository_ruleset_tool(
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        ruleset_id: int = Field(..., description="Ruleset ID to update"),
+        name: str | None = Field(None, description="New ruleset name"),
+        enforcement: str | None = Field(
+            None, description="Enforcement level: active, evaluate, or disabled"
+        ),
+        target: str | None = Field(
+            None, description="Target type: branch, tag, or push"
+        ),
+        conditions_json: str | None = Field(
+            None,
+            description=(
+                'JSON string for ref conditions. '
+                'Example: \'{"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}}\''
+            ),
+        ),
+        rules_json: str | None = Field(
+            None,
+            description=(
+                'JSON array of rule objects. '
+                'Example: \'[{"type": "pull_request", "parameters": {"required_approving_review_count": 2}}]\''
+            ),
+        ),
+        bypass_actors_json: str | None = Field(
+            None,
+            description=(
+                'JSON array of bypass actor objects. '
+                'Example: \'[{"actor_id": 1, "actor_type": "Team", "bypass_mode": "always"}]\''
+            ),
+        ),
+    ) -> str:
+        try:
+            import json as _json
+
+            conditions = _json.loads(conditions_json) if conditions_json else None
+            rules = _json.loads(rules_json) if rules_json else None
+            bypass_actors = (
+                _json.loads(bypass_actors_json) if bypass_actors_json else None
+            )
+
+            data = update_repository_ruleset(
+                owner=owner,
+                repo=repo,
+                ruleset_id=ruleset_id,
+                name=name,
+                enforcement=enforcement,
+                target=target,
+                conditions=conditions,
+                rules=rules,
+                bypass_actors=bypass_actors,
+            )
+            return json.dumps(success_response("update_repository_ruleset", data))
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed update_repository_ruleset for %s/%s#%d: %s",
+                owner, repo, ruleset_id, exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "update_repository_ruleset",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed update_repository_ruleset for %s/%s#%d: %s",
+                owner, repo, ruleset_id, exc,
+            )
+            return json.dumps(
+                error_response(
+                    "update_repository_ruleset",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while updating ruleset.",
+                    details={"exception": str(exc)},
+                )
+            )
+
+    @mcp.tool(
+        name="delete_repository_ruleset",
+        description="Delete a ruleset from a repository by its ID.",
+    )
+    def delete_repository_ruleset_tool(
+        owner: str = Field(..., description="Repository owner"),
+        repo: str = Field(..., description="Repository name"),
+        ruleset_id: int = Field(..., description="Ruleset ID to delete"),
+    ) -> str:
+        try:
+            data = delete_repository_ruleset(owner, repo, ruleset_id)
+            return json.dumps(success_response("delete_repository_ruleset", data))
+        except GitHubServiceError as exc:
+            logger.error(
+                "Failed delete_repository_ruleset for %s/%s#%d: %s",
+                owner, repo, ruleset_id, exc.message,
+            )
+            return json.dumps(
+                error_response(
+                    "delete_repository_ruleset",
+                    code=exc.code,
+                    message=exc.message,
+                    http_status=exc.http_status,
+                    retryable=exc.retryable,
+                    details=exc.details,
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed delete_repository_ruleset for %s/%s#%d: %s",
+                owner, repo, ruleset_id, exc,
+            )
+            return json.dumps(
+                error_response(
+                    "delete_repository_ruleset",
+                    code="INTERNAL_ERROR",
+                    message="Unexpected error while deleting ruleset.",
                     details={"exception": str(exc)},
                 )
             )

@@ -10,6 +10,7 @@ The GitHub MCP Server provides comprehensive access to GitHub operations:
 - Manage repositories, branches, commits, files, and releases across personal and organization accounts
 - Full issue and pull request lifecycle — create, update, review, merge, and automate with Copilot
 - Advanced search across repositories, code, users, issues, and pull requests
+- Enforce quality gates with branch protection rules and repository rulesets
 
 Perfect for:
 
@@ -1088,6 +1089,348 @@ Requests GitHub Copilot to review a pull request.
   "success": true,
   "pull_number": 16,
   "reviewer": "copilot"
+}
+```
+
+</details>
+
+
+### Branch Protection & Rulesets
+
+<details>
+<summary><code>get_branch_protection</code> — Get branch protection rules</summary>
+
+Returns all protection rules configured for a specific branch.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `branch` (string, required) — Branch name
+```
+
+**Output:**
+
+```json
+{
+  "url": "https://api.github.com/repos/owner/repo/branches/main/protection",
+  "required_status_checks": { "strict": true, "contexts": ["ci/test"] },
+  "enforce_admins": true,
+  "required_pull_request_reviews": {
+    "dismiss_stale_reviews": true,
+    "require_code_owner_reviews": false,
+    "required_approving_review_count": 1,
+    "require_last_push_approval": false,
+    "dismissal_restrictions": { "users": [], "teams": [] }
+  },
+  "restrictions": null,
+  "required_linear_history": false,
+  "allow_force_pushes": false,
+  "allow_deletions": false,
+  "required_conversation_resolution": true
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>set_branch_protection</code> — Create or replace branch protection rules</summary>
+
+Creates or fully replaces branch protection rules for a branch (PUT). Complex nested objects are passed as JSON strings.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `branch` (string, required) — Branch to protect
+- `enforce_admins` (bool, required) — Apply rules to administrators
+- `required_status_checks_json` (string, optional) — JSON: {"strict": bool, "contexts": [...]}
+- `required_pull_request_reviews_json` (string, optional) — JSON: {"required_approving_review_count": int, ...}
+- `restrictions_json` (string, optional) — JSON: {"users": [...], "teams": [...], "apps": [...]}
+- `required_linear_history` (bool, optional) — Require linear commit history (default: false)
+- `allow_force_pushes` (bool, optional) — Allow force pushes (default: GitHub default)
+- `allow_deletions` (bool, optional) — Allow branch deletion (default: false)
+- `block_creations` (bool, optional) — Block matching ref creation (default: false)
+- `required_conversation_resolution` (bool, optional) — Require resolved conversations (default: false)
+- `lock_branch` (bool, optional) — Make branch read-only (default: false)
+- `allow_fork_syncing` (bool, optional) — Allow forks to sync with upstream (default: false)
+```
+
+**Output:**
+
+```json
+{
+  "url": "https://api.github.com/repos/owner/repo/branches/main/protection",
+  "branch": "main",
+  "enforce_admins": true,
+  "required_linear_history": false,
+  "allow_force_pushes": false,
+  "allow_deletions": false,
+  "required_conversation_resolution": true,
+  "lock_branch": false
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>delete_branch_protection</code> — Delete branch protection rules</summary>
+
+Removes all protection rules from a branch.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `branch` (string, required) — Branch name
+```
+
+**Output:**
+
+```json
+{
+  "deleted": true,
+  "branch": "main"
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>get_pull_request_review_protection</code> — Get PR review requirements</summary>
+
+Returns the pull request review requirements configured for a protected branch.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `branch` (string, required) — Branch name
+```
+
+**Output:**
+
+```json
+{
+  "url": "https://api.github.com/repos/owner/repo/branches/main/protection/required_pull_request_reviews",
+  "dismiss_stale_reviews": true,
+  "require_code_owner_reviews": true,
+  "required_approving_review_count": 2,
+  "require_last_push_approval": false,
+  "dismissal_restrictions": { "users": [], "teams": [] }
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>update_pull_request_review_protection</code> — Update PR review requirements</summary>
+
+Updates only the specified PR review fields for a protected branch (PATCH).
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `branch` (string, required) — Branch name
+- `dismiss_stale_reviews` (bool, optional) — Dismiss approvals on new commits
+- `require_code_owner_reviews` (bool, optional) — Require review from code owners
+- `required_approving_review_count` (int, optional) — Required approvals (0–6)
+- `require_last_push_approval` (bool, optional) — Require approval from non-last-pusher
+- `dismissal_restrictions_json` (string, optional) — JSON: {"users": [...], "teams": [...]}
+```
+
+**Output:**
+
+```json
+{
+  "dismiss_stale_reviews": true,
+  "require_code_owner_reviews": true,
+  "required_approving_review_count": 2,
+  "require_last_push_approval": false,
+  "dismissal_restrictions": { "users": [], "teams": [] }
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>delete_pull_request_review_protection</code> — Remove PR review requirements</summary>
+
+Removes pull request review requirements from a protected branch.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `branch` (string, required) — Branch name
+```
+
+**Output:**
+
+```json
+{
+  "deleted": true,
+  "branch": "main"
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>list_repository_rulesets</code> — List repository rulesets</summary>
+
+Returns all rulesets defined for a repository, optionally including those inherited from the parent organization.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `includes_parents` (bool, optional) — Include parent org rulesets (default: true)
+- `page` (int, optional) — Page number (default: 1)
+- `per_page` (int, optional) — Results per page (default: 30)
+```
+
+**Output:**
+
+```json
+{
+  "rulesets": [
+    {
+      "id": 42,
+      "name": "Require PR reviews on main",
+      "target": "branch",
+      "source_type": "Repository",
+      "enforcement": "active",
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-06-01T08:00:00Z"
+    }
+  ]
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>get_repository_ruleset</code> — Get a repository ruleset</summary>
+
+Returns a specific ruleset with its full conditions, rules, and bypass actors.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `ruleset_id` (int, required) — Ruleset ID
+```
+
+**Output:**
+
+```json
+{
+  "id": 42,
+  "name": "Require PR reviews on main",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
+  "rules": [{ "type": "pull_request", "parameters": { "required_approving_review_count": 1 } }],
+  "bypass_actors": []
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>create_repository_ruleset</code> — Create a repository ruleset</summary>
+
+Creates a new ruleset for a repository. Pass conditions, rules, and bypass actors as JSON strings.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `name` (string, required) — Ruleset name
+- `enforcement` (string, required) — active, evaluate, or disabled
+- `target` (string, optional) — branch, tag, or push (default: branch)
+- `conditions_json` (string, optional) — JSON ref conditions, e.g. {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}}
+- `rules_json` (string, optional) — JSON array of rule objects, e.g. [{"type": "pull_request", "parameters": {...}}]
+- `bypass_actors_json` (string, optional) — JSON array of bypass actors, e.g. [{"actor_id": 1, "actor_type": "Team", "bypass_mode": "always"}]
+```
+
+**Output:**
+
+```json
+{
+  "id": 43,
+  "name": "Block force pushes",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["~ALL"], "exclude": [] } },
+  "rules": [{ "type": "non_fast_forward" }],
+  "bypass_actors": []
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>update_repository_ruleset</code> — Update a repository ruleset</summary>
+
+Replaces an existing ruleset (PUT). Only fields provided are sent to GitHub.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `ruleset_id` (int, required) — Ruleset ID to update
+- `name` (string, optional) — New ruleset name
+- `enforcement` (string, optional) — active, evaluate, or disabled
+- `target` (string, optional) — branch, tag, or push
+- `conditions_json` (string, optional) — JSON ref conditions
+- `rules_json` (string, optional) — JSON array of rule objects
+- `bypass_actors_json` (string, optional) — JSON array of bypass actors
+```
+
+**Output:**
+
+```json
+{
+  "id": 42,
+  "name": "Require PR reviews on main",
+  "enforcement": "active",
+  "rules": [{ "type": "pull_request", "parameters": { "required_approving_review_count": 2 } }]
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>delete_repository_ruleset</code> — Delete a repository ruleset</summary>
+
+Deletes a ruleset from a repository by ID.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `ruleset_id` (int, required) — Ruleset ID to delete
+```
+
+**Output:**
+
+```json
+{
+  "deleted": true,
+  "ruleset_id": 42
 }
 ```
 
