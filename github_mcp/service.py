@@ -2711,3 +2711,385 @@ def request_copilot_review(
                 details={"requires": "GitHub Enterprise + Copilot subscription"},
             )
         raise
+
+
+#################### Branch Protection ####################
+
+
+def get_branch_protection(owner: str, repo: str, branch: str) -> dict[str, Any]:
+    """Get branch protection rules for a specific branch."""
+    payload = _github_api_request(
+        method="GET",
+        path=f"/repos/{owner}/{repo}/branches/{branch}/protection",
+        required_scopes=["repo"],
+    )
+
+    def _extract_check_list(obj: Any) -> list[str]:
+        if not obj:
+            return []
+        return [c.get("context", "") for c in obj.get("checks", [])]
+
+    rsc = payload.get("required_status_checks")
+    rpr = payload.get("required_pull_request_reviews")
+    restrictions = payload.get("restrictions")
+
+    return {
+        "url": payload.get("url"),
+        "required_status_checks": {
+            "strict": rsc.get("strict"),
+            "contexts": rsc.get("contexts", []),
+            "checks": _extract_check_list(rsc),
+        } if rsc else None,
+        "enforce_admins": payload.get("enforce_admins", {}).get("enabled"),
+        "required_pull_request_reviews": {
+            "dismiss_stale_reviews": rpr.get("dismiss_stale_reviews"),
+            "require_code_owner_reviews": rpr.get("require_code_owner_reviews"),
+            "required_approving_review_count": rpr.get("required_approving_review_count"),
+            "require_last_push_approval": rpr.get("require_last_push_approval"),
+            "dismissal_restrictions": {
+                "users": [u.get("login") for u in rpr.get("dismissal_restrictions", {}).get("users", [])],
+                "teams": [t.get("slug") for t in rpr.get("dismissal_restrictions", {}).get("teams", [])],
+            },
+        } if rpr else None,
+        "restrictions": {
+            "users": [u.get("login") for u in restrictions.get("users", [])],
+            "teams": [t.get("slug") for t in restrictions.get("teams", [])],
+            "apps": [a.get("slug") for a in restrictions.get("apps", [])],
+        } if restrictions else None,
+        "required_linear_history": payload.get("required_linear_history", {}).get("enabled"),
+        "allow_force_pushes": payload.get("allow_force_pushes", {}).get("enabled"),
+        "allow_deletions": payload.get("allow_deletions", {}).get("enabled"),
+        "block_creations": payload.get("block_creations", {}).get("enabled"),
+        "required_conversation_resolution": payload.get("required_conversation_resolution", {}).get("enabled"),
+        "required_signatures": payload.get("required_signatures", {}).get("enabled"),
+        "lock_branch": payload.get("lock_branch", {}).get("enabled"),
+        "allow_fork_syncing": payload.get("allow_fork_syncing", {}).get("enabled"),
+    }
+
+
+def set_branch_protection(
+    owner: str,
+    repo: str,
+    branch: str,
+    enforce_admins: bool,
+    required_status_checks: dict[str, Any] | None = None,
+    required_pull_request_reviews: dict[str, Any] | None = None,
+    restrictions: dict[str, Any] | None = None,
+    required_linear_history: bool = False,
+    allow_force_pushes: bool | None = None,
+    allow_deletions: bool = False,
+    block_creations: bool = False,
+    required_conversation_resolution: bool = False,
+    lock_branch: bool = False,
+    allow_fork_syncing: bool = False,
+) -> dict[str, Any]:
+    """Set (create or replace) branch protection rules for a branch.
+
+    required_status_checks format: {"strict": bool, "contexts": [...]}
+    required_pull_request_reviews format: {"dismiss_stale_reviews": bool,
+        "require_code_owner_reviews": bool, "required_approving_review_count": int,
+        "require_last_push_approval": bool, "dismissal_restrictions": {"users": [...], "teams": [...]}}
+    restrictions format: {"users": [...], "teams": [...], "apps": [...]}
+    """
+    request_body: dict[str, Any] = {
+        "required_status_checks": required_status_checks,
+        "enforce_admins": enforce_admins,
+        "required_pull_request_reviews": required_pull_request_reviews,
+        "restrictions": restrictions,
+        "required_linear_history": required_linear_history,
+        "allow_deletions": allow_deletions,
+        "block_creations": block_creations,
+        "required_conversation_resolution": required_conversation_resolution,
+        "lock_branch": lock_branch,
+        "allow_fork_syncing": allow_fork_syncing,
+    }
+    if allow_force_pushes is not None:
+        request_body["allow_force_pushes"] = allow_force_pushes
+
+    payload = _github_api_request(
+        method="PUT",
+        path=f"/repos/{owner}/{repo}/branches/{branch}/protection",
+        json_body=request_body,
+        required_scopes=["repo"],
+    )
+
+    return {
+        "url": payload.get("url"),
+        "branch": branch,
+        "enforce_admins": payload.get("enforce_admins", {}).get("enabled"),
+        "required_linear_history": payload.get("required_linear_history", {}).get("enabled"),
+        "allow_force_pushes": payload.get("allow_force_pushes", {}).get("enabled"),
+        "allow_deletions": payload.get("allow_deletions", {}).get("enabled"),
+        "required_conversation_resolution": payload.get("required_conversation_resolution", {}).get("enabled"),
+        "lock_branch": payload.get("lock_branch", {}).get("enabled"),
+    }
+
+
+def delete_branch_protection(owner: str, repo: str, branch: str) -> dict[str, Any]:
+    """Delete branch protection rules for a specific branch."""
+    _github_api_request(
+        method="DELETE",
+        path=f"/repos/{owner}/{repo}/branches/{branch}/protection",
+        required_scopes=["repo"],
+    )
+    return {"deleted": True, "branch": branch}
+
+
+def get_pull_request_review_protection(
+    owner: str, repo: str, branch: str
+) -> dict[str, Any]:
+    """Get PR review requirements for a protected branch."""
+    payload = _github_api_request(
+        method="GET",
+        path=f"/repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews",
+        required_scopes=["repo"],
+    )
+
+    dismissal = payload.get("dismissal_restrictions", {})
+    return {
+        "url": payload.get("url"),
+        "dismiss_stale_reviews": payload.get("dismiss_stale_reviews"),
+        "require_code_owner_reviews": payload.get("require_code_owner_reviews"),
+        "required_approving_review_count": payload.get("required_approving_review_count"),
+        "require_last_push_approval": payload.get("require_last_push_approval"),
+        "dismissal_restrictions": {
+            "users": [u.get("login") for u in dismissal.get("users", [])],
+            "teams": [t.get("slug") for t in dismissal.get("teams", [])],
+        },
+    }
+
+
+def update_pull_request_review_protection(
+    owner: str,
+    repo: str,
+    branch: str,
+    dismiss_stale_reviews: bool | None = None,
+    require_code_owner_reviews: bool | None = None,
+    required_approving_review_count: int | None = None,
+    require_last_push_approval: bool | None = None,
+    dismissal_restrictions: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Update PR review requirements for a protected branch (PATCH — only sends provided fields)."""
+    request_body: dict[str, Any] = {}
+    if dismiss_stale_reviews is not None:
+        request_body["dismiss_stale_reviews"] = dismiss_stale_reviews
+    if require_code_owner_reviews is not None:
+        request_body["require_code_owner_reviews"] = require_code_owner_reviews
+    if required_approving_review_count is not None:
+        request_body["required_approving_review_count"] = required_approving_review_count
+    if require_last_push_approval is not None:
+        request_body["require_last_push_approval"] = require_last_push_approval
+    if dismissal_restrictions is not None:
+        request_body["dismissal_restrictions"] = dismissal_restrictions
+
+    payload = _github_api_request(
+        method="PATCH",
+        path=f"/repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews",
+        json_body=request_body,
+        required_scopes=["repo"],
+    )
+
+    dismissal = payload.get("dismissal_restrictions", {})
+    return {
+        "url": payload.get("url"),
+        "dismiss_stale_reviews": payload.get("dismiss_stale_reviews"),
+        "require_code_owner_reviews": payload.get("require_code_owner_reviews"),
+        "required_approving_review_count": payload.get("required_approving_review_count"),
+        "require_last_push_approval": payload.get("require_last_push_approval"),
+        "dismissal_restrictions": {
+            "users": [u.get("login") for u in dismissal.get("users", [])],
+            "teams": [t.get("slug") for t in dismissal.get("teams", [])],
+        },
+    }
+
+
+def delete_pull_request_review_protection(
+    owner: str, repo: str, branch: str
+) -> dict[str, Any]:
+    """Remove PR review requirements from a protected branch."""
+    _github_api_request(
+        method="DELETE",
+        path=f"/repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews",
+        required_scopes=["repo"],
+    )
+    return {"deleted": True, "branch": branch}
+
+
+#################### Repository Rulesets ####################
+
+
+def list_repository_rulesets(
+    owner: str,
+    repo: str,
+    includes_parents: bool = True,
+    per_page: int = 30,
+    page: int = 1,
+) -> dict[str, Any]:
+    """List all rulesets for a repository."""
+    payload = _github_api_request(
+        method="GET",
+        path=f"/repos/{owner}/{repo}/rulesets",
+        params={
+            "includes_parents": str(includes_parents).lower(),
+            "per_page": per_page,
+            "page": page,
+        },
+        required_scopes=["repo"],
+    )
+
+    if not isinstance(payload, list):
+        payload = []
+
+    return {
+        "rulesets": [
+            {
+                "id": r.get("id"),
+                "name": r.get("name"),
+                "target": r.get("target"),
+                "source_type": r.get("source_type"),
+                "enforcement": r.get("enforcement"),
+                "node_id": r.get("node_id"),
+                "created_at": r.get("created_at"),
+                "updated_at": r.get("updated_at"),
+            }
+            for r in payload
+        ],
+        "page": page,
+        "per_page": per_page,
+    }
+
+
+def get_repository_ruleset(
+    owner: str, repo: str, ruleset_id: int
+) -> dict[str, Any]:
+    """Get a specific ruleset for a repository."""
+    payload = _github_api_request(
+        method="GET",
+        path=f"/repos/{owner}/{repo}/rulesets/{ruleset_id}",
+        required_scopes=["repo"],
+    )
+
+    return {
+        "id": payload.get("id"),
+        "name": payload.get("name"),
+        "target": payload.get("target"),
+        "source_type": payload.get("source_type"),
+        "source": payload.get("source"),
+        "enforcement": payload.get("enforcement"),
+        "conditions": payload.get("conditions"),
+        "rules": payload.get("rules", []),
+        "bypass_actors": payload.get("bypass_actors", []),
+        "node_id": payload.get("node_id"),
+        "created_at": payload.get("created_at"),
+        "updated_at": payload.get("updated_at"),
+    }
+
+
+def create_repository_ruleset(
+    owner: str,
+    repo: str,
+    name: str,
+    enforcement: str,
+    target: str = "branch",
+    conditions: dict[str, Any] | None = None,
+    rules: list[dict[str, Any]] | None = None,
+    bypass_actors: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Create a new ruleset for a repository.
+
+    enforcement: active | evaluate | disabled
+    target: branch | tag | push
+    conditions example: {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}}
+    rules example: [{"type": "pull_request", "parameters": {"required_approving_review_count": 1}}]
+    bypass_actors example: [{"actor_id": 1, "actor_type": "Team", "bypass_mode": "always"}]
+    """
+    request_body: dict[str, Any] = {
+        "name": name,
+        "target": target,
+        "enforcement": enforcement,
+    }
+    if conditions is not None:
+        request_body["conditions"] = conditions
+    if rules is not None:
+        request_body["rules"] = rules
+    if bypass_actors is not None:
+        request_body["bypass_actors"] = bypass_actors
+
+    payload = _github_api_request(
+        method="POST",
+        path=f"/repos/{owner}/{repo}/rulesets",
+        json_body=request_body,
+        required_scopes=["repo"],
+    )
+
+    return {
+        "id": payload.get("id"),
+        "name": payload.get("name"),
+        "target": payload.get("target"),
+        "enforcement": payload.get("enforcement"),
+        "conditions": payload.get("conditions"),
+        "rules": payload.get("rules", []),
+        "bypass_actors": payload.get("bypass_actors", []),
+        "node_id": payload.get("node_id"),
+        "created_at": payload.get("created_at"),
+        "updated_at": payload.get("updated_at"),
+    }
+
+
+def update_repository_ruleset(
+    owner: str,
+    repo: str,
+    ruleset_id: int,
+    name: str | None = None,
+    enforcement: str | None = None,
+    target: str | None = None,
+    conditions: dict[str, Any] | None = None,
+    rules: list[dict[str, Any]] | None = None,
+    bypass_actors: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Update an existing ruleset for a repository (PUT — replaces the entire ruleset)."""
+    request_body: dict[str, Any] = {}
+    if name is not None:
+        request_body["name"] = name
+    if enforcement is not None:
+        request_body["enforcement"] = enforcement
+    if target is not None:
+        request_body["target"] = target
+    if conditions is not None:
+        request_body["conditions"] = conditions
+    if rules is not None:
+        request_body["rules"] = rules
+    if bypass_actors is not None:
+        request_body["bypass_actors"] = bypass_actors
+
+    payload = _github_api_request(
+        method="PUT",
+        path=f"/repos/{owner}/{repo}/rulesets/{ruleset_id}",
+        json_body=request_body,
+        required_scopes=["repo"],
+    )
+
+    return {
+        "id": payload.get("id"),
+        "name": payload.get("name"),
+        "target": payload.get("target"),
+        "enforcement": payload.get("enforcement"),
+        "conditions": payload.get("conditions"),
+        "rules": payload.get("rules", []),
+        "bypass_actors": payload.get("bypass_actors", []),
+        "node_id": payload.get("node_id"),
+        "created_at": payload.get("created_at"),
+        "updated_at": payload.get("updated_at"),
+    }
+
+
+def delete_repository_ruleset(
+    owner: str, repo: str, ruleset_id: int
+) -> dict[str, Any]:
+    """Delete a ruleset for a repository."""
+    _github_api_request(
+        method="DELETE",
+        path=f"/repos/{owner}/{repo}/rulesets/{ruleset_id}",
+        required_scopes=["repo"],
+    )
+    return {"deleted": True, "ruleset_id": ruleset_id}

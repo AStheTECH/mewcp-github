@@ -43,6 +43,17 @@ TOOL_REQUIRED_SCOPES = {
     "sub_issue_write": ["repo"],
     "assign_copilot_to_issue": ["repo"],
     "request_copilot_review": ["repo"],
+    "get_branch_protection": ["repo"],
+    "set_branch_protection": ["repo"],
+    "delete_branch_protection": ["repo"],
+    "get_pull_request_review_protection": ["repo"],
+    "update_pull_request_review_protection": ["repo"],
+    "delete_pull_request_review_protection": ["repo"],
+    "list_repository_rulesets": ["repo"],
+    "get_repository_ruleset": ["repo"],
+    "create_repository_ruleset": ["repo"],
+    "update_repository_ruleset": ["repo"],
+    "delete_repository_ruleset": ["repo"],
 }
 
 
