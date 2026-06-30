@@ -7,7 +7,7 @@ from fastmcp import FastMCP
 from fastmcp_credentials import CredentialMiddleware, HeaderCredentialBackend
 
 from github_mcp.cli import parse_args
-from github_mcp.config import configure_logging
+from github_mcp.config import SERVER_VERSION, configure_logging
 from github_mcp.tools import register_tools
 
 configure_logging()
@@ -15,12 +15,20 @@ logger = logging.getLogger("github-mcp-server")
 
 backend = HeaderCredentialBackend()
 mcp = FastMCP(
-    "MewCP GitHub MCP Server", middleware=[CredentialMiddleware(backend, "oauth")]
+    "MewCP GitHub MCP Server",
+    version=SERVER_VERSION,
+    middleware=[CredentialMiddleware(backend, "oauth")],
 )
 register_tools(mcp)
 
+
 # Expose ASGI app for hosted runtimes.
 app = mcp.http_app(path="/mcp", transport="streamable-http", stateless_http=True)
+
+
+@app.get("/health")
+async def health() -> dict:
+    return {"status": "ok", "version": SERVER_VERSION}
 
 
 if __name__ == "__main__":

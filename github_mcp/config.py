@@ -1,6 +1,11 @@
 import logging
 
+SERVER_VERSION = "v1.0.0"
+BREAKING_CHANGES: list[dict] = []
+
 GITHUB_API_BASE = "https://api.github.com"
+CONNECT_TIMEOUT = 5
+READ_TIMEOUT = 30
 
 TOOL_REQUIRED_SCOPES = {
     "get_repo": ["repo"],
