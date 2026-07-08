@@ -21,7 +21,7 @@ class ToolLogger:
 
     def failure(self, code: str, message: str) -> None:
         elapsed_ms = int((time.perf_counter() - self._start) * 1000)
-        self._logger.info(
+        self._logger.error(
             "tool=%s status=error code=%s duration_ms=%d msg=%s",
             self._tool_name,
             code,

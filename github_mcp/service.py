@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 from fastmcp_credentials import get_credentials
 
-from .config import GITHUB_API_BASE
+from .config import CONNECT_TIMEOUT, GITHUB_API_BASE, READ_TIMEOUT
 
 
 class GitHubServiceError(Exception):
@@ -86,7 +86,7 @@ def _github_api_request(
 
     url = f"{GITHUB_API_BASE}{path}"
 
-    with httpx.Client(timeout=30.0) as client:
+    with httpx.Client(timeout=httpx.Timeout(connect=CONNECT_TIMEOUT, read=READ_TIMEOUT)) as client:
         response = client.request(
             method=method,
             url=url,

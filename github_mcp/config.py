@@ -1,11 +1,22 @@
 import logging
+import os
 
-SERVER_VERSION = "v1.0.0"
-BREAKING_CHANGES: list[dict] = []
+SERVER_VERSION = "v2.0.0"
+BREAKING_CHANGES: list[dict] = [
+    {
+        "version": "v2.0.0",
+        "description": (
+            "Tool responses changed from a JSON-encoded string to native typed "
+            "structured objects. The `data` field on each tool response is now a "
+            "typed model (one per tool) instead of an untyped dict serialized into "
+            "a raw string."
+        ),
+    },
+]
 
 GITHUB_API_BASE = "https://api.github.com"
-CONNECT_TIMEOUT = 5
-READ_TIMEOUT = 30
+CONNECT_TIMEOUT = 5    # TCP connection — fixed across all servers
+READ_TIMEOUT = 30      # GitHub REST API SLA is generous; 30s covers slow list/search endpoints
 
 TOOL_REQUIRED_SCOPES = {
     "get_repo": ["repo"],
@@ -63,8 +74,16 @@ TOOL_REQUIRED_SCOPES = {
 
 
 def configure_logging() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler()],
-    )
+    log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    try:
+        from pythonjsonlogger import jsonlogger
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            jsonlogger.JsonFormatter(fmt="%(asctime)s %(name)s %(levelname)s %(message)s")
+        )
+    except ImportError:
+        handler = logging.StreamHandler()
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(log_level)
