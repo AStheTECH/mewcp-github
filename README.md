@@ -1,49 +1,62 @@
-**Your entire GitHub workflow, accessible through AI.**
+**Comprehensive GitHub API access for repositories, issues, pull requests, and code — all through typed MCP tools.**
 
-A Model Context Protocol (MCP) server that exposes GitHub's API for repository management, code search, issue tracking, pull request workflows, and release management.
+A Model Context Protocol (MCP) server that exposes GitHub's API for managing repositories, issues, pull requests, branches, releases, tags, branch protection, and repository rulesets.
+
+> **v2.0.0:** Tool responses changed from a JSON-encoded string to native typed structured objects. The `data` field on each tool response is now a typed model (one per tool) instead of an untyped dict serialized into a raw string.
 
 
 ## Overview
 
-The GitHub MCP Server provides comprehensive access to GitHub operations:
+The MewCP GitHub MCP Server provides:
 
-- Manage repositories, branches, commits, files, and releases across personal and organization accounts
-- Full issue and pull request lifecycle — create, update, review, merge, and automate with Copilot
-- Advanced search across repositories, code, users, issues, and pull requests
-- Enforce quality gates with branch protection rules and repository rulesets
+- Repository management — get, create, update, and fork repositories; create or update files and push multi-file commits
+- Search across GitHub — repositories, code, users, issues, and pull requests
+- Issue tracking — list, get, create, comment on, and update issues, including sub-issue relationships and Copilot assignment
+- Pull request workflows — read, list, create, update, merge PRs, manage branch updates, write reviews, reply to comments, and request Copilot review
+- Repository administration — branches, commits, file contents, tags, releases, labels, branch protection, PR review protection, and repository rulesets
 
 Perfect for:
 
-- AI assistants that need to read, write, or manage GitHub repositories
-- Automating code review, issue triage, and release workflows
-- Building developer tools that integrate deeply with GitHub
+- AI agents that need to read and act on GitHub repository state (issues, PRs, files, commits)
+- Automating routine GitHub workflows — issue triage, PR review requests, release lookups
+- Enforcing and auditing repository governance — branch protection, PR review requirements, rulesets
 
 
 ## Tools
 
-### Repository Operations
 
 <details>
-<summary><code>get_repo</code> — Get repository details</summary>
+<summary><code>get_repo</code> — Get basic details for a GitHub repository.</summary>
 
-Returns basic information about a GitHub repository.
+Get basic details for a GitHub repository.
 
 **Inputs:**
 ```
-- `owner` (string, required) — Repository owner (user or organization)
+- `owner` (string, required) — Repository owner, for example octocat
 - `repo` (string, required) — Repository name
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "name": "my-repo",
-  "full_name": "owner/my-repo",
-  "description": "...",
-  "default_branch": "main",
-  "stargazers_count": 42,
-  ...
+  id: number | null;
+  name: string | null;
+  full_name: string | null;
+  owner: object | null;
+  html_url: string | null;
+  description: string | null;
+  private: boolean | null;
+  fork: boolean | null;
+  url: string | null;
+  default_branch: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  stargazers_count: number | null;
+  language: string | null;
+  has_issues: boolean | null;
+  has_downloads: boolean | null;
+  forks_count: number | null;
 }
 ```
 
@@ -51,50 +64,52 @@ Returns basic information about a GitHub repository.
 
 
 <details>
-<summary><code>list_branches</code> — List repository branches</summary>
+<summary><code>update_repository</code> — Updates repository metadata or renames a repository.</summary>
 
-Returns a paginated list of branches in a repository.
+Updates repository metadata or renames a repository. Only the fields you provide are changed — others keep their current value. NOTE: this overwrites the current field values — the original state is not stored after the call. The response includes both the before and after state so you have a full record of what changed.
 
 **Inputs:**
 ```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `page` (int, optional) — Page number (default: 1)
-- `per_page` (int, optional) — Results per page (max: 100, default: 30)
-```
-
-**Output:**
-
-```json
-{
-  "branches": [{ "name": "main", "commit": { "sha": "abc123" } }, ...]
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>create_repository</code> — Create a new repository</summary>
-
-Creates a new repository under the authenticated user or an organization.
-
-**Inputs:**
-```
-- `name` (string, required) — Repository name
+- `name` (string, optional) — New repository name (to rename)
 - `description` (string, optional) — Repository description
-- `private` (bool, optional) — Make the repository private (default: false)
-- `org` (string, optional) — Organization to create the repo under (omit for personal)
-- `auto_init` (bool, optional) — Initialize with a README (default: false)
+- `private` (boolean, optional) — Make repository private/public
+- `default_branch` (string, optional) — Default branch name
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "full_name": "owner/new-repo",
-  "html_url": "https://github.com/owner/new-repo",
-  ...
+  before: {
+    id: number | null;
+    name: string | null;
+    full_name: string | null;
+    owner: object | null;
+    html_url: string | null;
+    description: string | null;
+    private: boolean | null;
+    fork: boolean | null;
+    url: string | null;
+    default_branch: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+    stargazers_count: number | null;
+    language: string | null;
+    has_issues: boolean | null;
+    has_downloads: boolean | null;
+    forks_count: number | null;
+  };
+  after: {
+    id: number | null;
+    name: string | null;
+    full_name: string | null;
+    html_url: string | null;
+    private: boolean | null;
+    description: string | null;
+    default_branch: string | null;
+  };
 }
 ```
 
@@ -102,24 +117,32 @@ Creates a new repository under the authenticated user or an organization.
 
 
 <details>
-<summary><code>fork_repository</code> — Fork a repository</summary>
+<summary><code>create_repository</code> — Create a new GitHub repository in your personal account or an organization.</summary>
 
-Forks a repository to the authenticated user's account or an organization.
+Create a new GitHub repository in your personal account or an organization.
 
 **Inputs:**
 ```
-- `owner` (string, required) — Owner of the repository to fork
-- `repo` (string, required) — Repository to fork
-- `org` (string, optional) — Organization to fork into (omit for personal account)
+- `name` (string, required) — Repository name (required). Must be unique in account/organization.
+- `description` (string, optional) — Repository description (optional).
+- `private` (boolean, optional, default: false) — Make repository private (default: False for public).
+- `auto_init` (boolean, optional, default: false) — Auto-initialize with README (default: False).
+- `gitignore_template` (string, optional) — Gitignore template name. Example: 'Python', 'Node'.
+- `org` (string, optional) — Organization name to create repo in (optional).
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "full_name": "your-username/forked-repo",
-  "html_url": "https://github.com/your-username/forked-repo",
-  ...
+  id: number | null;
+  name: string | null;
+  full_name: string | null;
+  url: string | null;
+  html_url: string | null;
+  owner: object | null;
+  private: boolean | null;
+  created_at: string | null;
 }
 ```
 
@@ -127,54 +150,543 @@ Forks a repository to the authenticated user's account or an organization.
 
 
 <details>
-<summary><code>create_branch</code> — Create a new branch</summary>
+<summary><code>fork_repository</code> — Fork a repository to your personal account or an organization.</summary>
 
-Creates a new branch in a repository from a specified commit SHA.
+Fork a repository to your personal account or an organization.
+
+**Inputs:**
+```
+- `owner` (string, required) — Original repository owner.
+- `repo` (string, required) — Original repository name.
+- `org` (string, optional) — Organization name to fork into (optional).
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  id: number | null;
+  name: string | null;
+  full_name: string | null;
+  url: string | null;
+  html_url: string | null;
+  owner: object | null;
+  fork: boolean | null;
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>create_or_update_file</code> — Create or update a file in a repository. Prevents accidental overwrites with SHA validation.</summary>
+
+Create or update a file in a repository. Prevents accidental overwrites with SHA validation.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner name.
+- `repo` (string, required) — Repository name.
+- `path` (string, required) — File path in repository. Example: 'src/main.py'.
+- `content` (string, required) — File content to write.
+- `message` (string, required) — Commit message.
+- `branch` (string, optional) — Target branch name (optional).
+- `sha` (string, optional) — File SHA for updates (optional).
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  content: object | null;
+  commit: object | null;
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>push_files</code> — Push multiple files to a repository in a single atomic commit.</summary>
+
+Push multiple files to a repository in a single atomic commit.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner name.
+- `repo` (string, required) — Repository name.
+- `files_json` (string, required) — JSON array of file objects with path and content keys. Example: '[{"path": "file1.txt", "content": "hello"}]'
+- `message` (string, required) — Commit message.
+- `branch` (string, optional) — Target branch name (optional).
+- `author_name` (string, optional) — Author name (optional).
+- `author_email` (string, optional) — Author email (optional).
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  commit_sha: string | null;
+  tree_sha: string | null;
+  branch: string | null;
+  message: string | null;
+  url: string | null;
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>search_repositories</code> — Search GitHub repositories.</summary>
+
+Search GitHub repositories.
+
+**Inputs:**
+```
+- `query` (string, required) — Search query
+- `sort` (string, optional, default: "stars") — Sort by: stars, forks, updated
+- `order` (string, optional, default: "desc") — Order: asc or desc
+- `page` (integer, optional, default: 1) — Page number
+- `perPage` (integer, optional, default: 30) — Items per page
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  items: {
+    id: number | null;
+    name: string | null;
+    full_name: string | null;
+    private: boolean | null;
+    html_url: string | null;
+    description: string | null;
+    stars: number | null;
+  }[];
+  total_count: number;
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>search_code</code> — Fast and precise code search across GitHub repositories.</summary>
+
+Fast and precise code search across GitHub repositories.
+
+**Inputs:**
+```
+- `query` (string, required) — Search query using GitHub code search syntax.
+- `sort` (string, optional, default: "indexed") — Sort field. Only 'indexed' is supported.
+- `order` (string, optional, default: "desc") — Sort order: asc or desc.
+- `page` (integer, optional, default: 1) — Page number.
+- `perPage` (integer, optional, default: 30) — Results per page (1-100).
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  total_count: number;
+  incomplete_results: boolean;
+  items: {
+    name: string | null;
+    path: string | null;
+    repository: string | null;
+    url: string | null;
+  }[];
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>search_users</code> — Search GitHub users by name, location, followers, or other attributes.</summary>
+
+Search GitHub users by name, location, followers, or other attributes.
+
+**Inputs:**
+```
+- `query` (string, required) — User search query using GitHub's search syntax.
+- `sort` (string, optional, default: "followers") — Sort field: followers, repositories, joined.
+- `order` (string, optional, default: "desc") — Sort order: asc or desc.
+- `page` (integer, optional, default: 1) — Page number.
+- `perPage` (integer, optional, default: 30) — Results per page (1-100).
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  total_count: number;
+  incomplete_results: boolean;
+  items: {
+    login: string | null;
+    id: number | null;
+    profile_url: string | null;
+    avatar_url: string | null;
+  }[];
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>search_issues</code> — Search issues and pull requests across GitHub.</summary>
+
+Search issues and pull requests across GitHub.
+
+**Inputs:**
+```
+- `query` (string, required) — Search query using GitHub issue search syntax.
+- `sort` (string, optional, default: "updated") — Sort field: updated, created, comments.
+- `order` (string, optional, default: "desc") — Sort order: asc or desc.
+- `owner` (string, optional) — Repository owner (optional).
+- `repo` (string, optional) — Repository name (optional).
+- `page` (integer, optional, default: 1) — Page number.
+- `perPage` (integer, optional, default: 30) — Results per page (1-100).
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  total_count: number;
+  incomplete_results: boolean;
+  items: {
+    number: number | null;
+    title: string | null;
+    state: string | null;
+    body: string | null;
+    url: string | null;
+    comments: number | null;
+    user: string | null;
+  }[];
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>search_pull_requests</code> — Search for pull requests across GitHub using search syntax.</summary>
+
+Search for pull requests across GitHub using search syntax.
+
+**Inputs:**
+```
+- `query` (string, required) — Search query using GitHub search syntax.
+- `sort` (string, optional, default: "updated") — Sort field: updated, created, comments.
+- `order` (string, optional, default: "desc") — Sort order: asc or desc.
+- `owner` (string, optional) — Repository owner (optional).
+- `repo` (string, optional) — Repository name (optional).
+- `page` (integer, optional, default: 1) — Page number.
+- `per_page` (integer, optional, default: 30) — Results per page.
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  total_count: number;
+  incomplete_results: boolean;
+  pull_requests: {
+    number: number | null;
+    title: string | null;
+    state: string | null;
+    url: string | null;
+    user: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+    comments: number | null;
+  }[];
+  page: number | null;
+  per_page: number | null;
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>list_issues</code> — List issues in a GitHub repository.</summary>
+
+List issues in a GitHub repository.
 
 **Inputs:**
 ```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `branch` (string, required) — Name of the new branch
-- `sha` (string, required) — Commit SHA to branch from
+- `state` (string, optional, default: "open") — Filter by state: open, closed, all
+- `labels` (string, optional) — Comma-separated label names to filter by
+- `page` (integer, optional, default: 1) — Page number
+- `perPage` (integer, optional, default: 30) — Items per page
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "ref": "refs/heads/new-branch",
-  "object": { "sha": "abc123" }
+  issues: {
+    number: number | null;
+    title: string | null;
+    state: string | null;
+    url: string | null;
+    body: string | null;
+    user: string | null;
+    labels: string[];
+    created_at: string | null;
+    updated_at: string | null;
+  }[];
+  count: number;
 }
 ```
 
 </details>
 
 
-### File & Commit Operations
+<details>
+<summary><code>get_issue</code> — Get detailed information about a specific GitHub issue.</summary>
+
+Get detailed information about a specific GitHub issue.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner name.
+- `repo` (string, required) — Repository name.
+- `issue_number` (integer, required) — Issue number.
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  number: number | null;
+  title: string | null;
+  body: string | null;
+  state: string | null;
+  state_reason: string | null;
+  labels: string[];
+  assignees: string[];
+  url: string | null;
+  user: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  closed_at: string | null;
+}
+```
+
+</details>
+
 
 <details>
-<summary><code>get_file_contents</code> — Get file or directory contents</summary>
+<summary><code>get_issue_comments</code> — Get all comments on a GitHub issue with pagination support.</summary>
 
-Returns the contents of a file or directory from a repository.
+Get all comments on a GitHub issue with pagination support.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner name.
+- `repo` (string, required) — Repository name.
+- `issue_number` (integer, required) — Issue number.
+- `page` (integer, optional, default: 1) — Page number.
+- `perPage` (integer, optional, default: 30) — Comments per page (1-100).
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  comments: {
+    id: number | null;
+    body: string | null;
+    url: string | null;
+    user: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+  }[];
+  page: number | null;
+  per_page: number | null;
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>create_issue</code> — Create a new GitHub issue in a repository.</summary>
+
+Create a new GitHub issue in a repository.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner name.
+- `repo` (string, required) — Repository name.
+- `title` (string, required) — Issue title (required).
+- `body` (string, optional) — Issue description (optional).
+- `assignees` (string[], optional) — List of usernames to assign (optional).
+- `labels` (string[], optional) — List of label names (optional).
+- `milestone` (integer, optional) — Milestone ID (optional).
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  id: number | null;
+  number: number | null;
+  url: string | null;
+  title: string | null;
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>add_issue_comment</code> — Add a comment to a GitHub issue or pull request.</summary>
+
+Add a comment to a GitHub issue or pull request.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner name.
+- `repo` (string, required) — Repository name.
+- `issue_number` (integer, required) — Issue or pull request number.
+- `body` (string, required) — Comment text (required).
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  id: number | null;
+  url: string | null;
+  body: string | null;
+  user: string | null;
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>update_issue</code> — Updates a GitHub issue's title, body, state, assignees, labels, or milestone.</summary>
+
+Updates a GitHub issue's title, body, state, assignees, labels, or milestone. Only the fields you provide are changed — others keep their current value. NOTE: this overwrites the current field values — the original state is not stored after the call. The response includes both the before and after state so you have a full record of what changed.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner name.
+- `repo` (string, required) — Repository name.
+- `issue_number` (integer, required) — Issue number to update.
+- `title` (string, optional) — New issue title (optional).
+- `body` (string, optional) — New issue description (optional).
+- `state` (string, optional) — New state: open or closed (optional).
+- `state_reason` (string, optional) — Reason when closing: completed, not_planned (optional).
+- `assignees` (string[], optional) — New list of assignees (optional).
+- `labels` (string[], optional) — New list of labels (optional).
+- `milestone` (integer, optional) — Milestone ID (optional).
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  before: {
+    number: number | null;
+    title: string | null;
+    body: string | null;
+    state: string | null;
+    state_reason: string | null;
+    labels: string[];
+    assignees: string[];
+    url: string | null;
+    user: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+    closed_at: string | null;
+  };
+  after: {
+    id: number | null;
+    number: number | null;
+    url: string | null;
+    title: string | null;
+    state: string | null;
+  };
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>list_org_repositories_by_contributor</code> — Find all repositories in an organization where specific contributors have made contributions.</summary>
+
+Find all repositories in an organization where specific contributors have made contributions.
+
+**Inputs:**
+```
+- `org` (string, required) — Organization name
+- `contributor_usernames` (string, required) — GitHub username(s) to filter by. Comma-separated for multiple.
+- `repo_type` (string, optional, default: "all") — Filter by type: all, public, or private.
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  filter_contributors: string[];
+  organization: string | null;
+  repo_type_filter: string | null;
+  total_repos_with_filtered_contributors: number;
+  repos: {
+    repo: string | null;
+    full_name: string | null;
+    url: string | null;
+    private: boolean | null;
+    description: string | null;
+    contributors: {
+      username: string | null;
+      contributions: number;
+    }[];
+    total_filtered_contributions: number;
+  }[];
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>sub_issue_write</code> — Manage sub-issues for a parent issue (add, remove, reprioritize).</summary>
+
+Manage sub-issues for a parent issue (add, remove, reprioritize).
 
 **Inputs:**
 ```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `path` (string, required) — File or directory path
-- `branch` (string, optional) — Branch, tag, or commit SHA (default: default branch)
+- `issue_number` (integer, required) — Parent issue number
+- `method` (string, required) — Operation: add, remove, or reprioritize
+- `sub_issue_id` (integer, required) — ID of the sub-issue
+- `replace_parent` (boolean, optional, default: false) — Replace current parent when adding
+- `after_id` (integer, optional) — Sub-issue ID to position after
+- `before_id` (integer, optional) — Sub-issue ID to position before
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "type": "file",
-  "name": "README.md",
-  "content": "base64-encoded-content",
-  "sha": "abc123",
-  ...
+  method: string | null;
+  sub_issue_id: number | null;
+  success: boolean | null;
+  message: string | null;
 }
 ```
 
@@ -182,27 +694,28 @@ Returns the contents of a file or directory from a repository.
 
 
 <details>
-<summary><code>create_or_update_file</code> — Create or update a single file</summary>
+<summary><code>assign_copilot_to_issue</code> — Assign GitHub Copilot to work on an issue.</summary>
 
-Creates a new file or updates an existing file in a repository.
+Assign GitHub Copilot to work on an issue.
 
 **Inputs:**
 ```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `path` (string, required) — Path to the file
-- `content` (string, required) — File content (base64 encoded)
-- `message` (string, required) — Commit message
-- `branch` (string, optional) — Branch to commit to
-- `sha` (string, optional) — SHA of file being replaced (required for updates)
+- `issue_number` (integer, required) — Issue number
+- `base_ref` (string, optional) — Git reference to start from (optional).
+- `custom_instructions` (string, optional) — Additional context for Copilot (optional).
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "commit": { "sha": "abc123", "message": "..." },
-  "content": { "name": "file.txt", "path": "file.txt" }
+  issue_number: number | null;
+  assigned: boolean | null;
+  job_id: number | null;
+  status: string | null;
+  pull_request_url: string | null;
 }
 ```
 
@@ -210,25 +723,70 @@ Creates a new file or updates an existing file in a repository.
 
 
 <details>
-<summary><code>push_files</code> — Push multiple files in one commit</summary>
+<summary><code>pull_request_read</code> — Get details for a pull request with flexible method options (get, get_files, get_status, get_comments, get_review_comments).</summary>
 
-Atomically pushes multiple files to a repository branch in a single commit.
+Get details for a pull request with flexible method options (get, get_files, get_status, get_comments, get_review_comments).
 
 **Inputs:**
 ```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `branch` (string, required) — Branch to push to
-- `files` (list, required) — List of file objects with path and content
-- `message` (string, required) — Commit message
+- `pull_number` (integer, required) — Pull request number
+- `method` (string, optional, default: "get") — Which PR data to retrieve: get, get_files, get_status, get_comments, get_review_comments
+- `page` (integer, optional, default: 1) — Page number
+- `per_page` (integer, optional, default: 30) — Results per page
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+Polymorphic shape covering all 5 `method` variants. Only the fields relevant to the method used are populated; the rest stay `null`.
+
+```typescript
 {
-  "sha": "new-commit-sha",
-  "message": "Commit message"
+  // method="get"
+  number: number | null;
+  title: string | null;
+  body: string | null;
+  state: string | null;
+  state_reason: string | null;
+  url: string | null;
+  user: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  merged_at: string | null;
+  merged: boolean | null;
+  merge_commit_sha: string | null;
+  head: object | null;
+  base: object | null;
+  draft: boolean | null;
+  additions: number | null;
+  deletions: number | null;
+  changed_files: number | null;
+  commits: number | null;
+  labels: string[] | null;
+  assignees: string[] | null;
+  reviewers: string[] | null;
+
+  // method="get_files"
+  files: object[] | null;
+  total_files: number | null;
+
+  // method="get_status"
+  sha: string | null;
+  total_count: number | null;
+  statuses: object[] | null;
+
+  // method="get_comments"
+  comments: object[] | null;
+  total_comments: number | null;
+
+  // method="get_review_comments"
+  review_comments: object[] | null;
+  total_review_comments: number | null;
+
+  // pagination (get_files / get_comments / get_review_comments)
+  page: number | null;
+  per_page: number | null;
 }
 ```
 
@@ -236,28 +794,43 @@ Atomically pushes multiple files to a repository branch in a single commit.
 
 
 <details>
-<summary><code>list_commits</code> — List commits in a repository</summary>
+<summary><code>list_pull_requests</code> — List pull requests in a GitHub repository with filtering and sorting options.</summary>
 
-Returns a paginated list of commits with optional filtering.
+List pull requests in a GitHub repository with filtering and sorting options.
 
 **Inputs:**
 ```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `sha` (string, optional) — Branch or commit SHA to start from
-- `path` (string, optional) — Filter commits by file path
-- `author` (string, optional) — Filter by author username or email
-- `since` (string, optional) — ISO 8601 datetime; only commits after this date
-- `until` (string, optional) — ISO 8601 datetime; only commits before this date
-- `page` (int, optional) — Page number
-- `per_page` (int, optional) — Results per page (max: 100)
+- `state` (string, optional, default: "open") — Filter by state: open, closed, or all
+- `sort` (string, optional, default: "created") — Sort by: created, updated, popularity, or long-running
+- `direction` (string, optional, default: "desc") — Sort direction: asc or desc
+- `base` (string, optional) — Filter by base branch
+- `head` (string, optional) — Filter by head branch (user:branch format)
+- `page` (integer, optional, default: 1) — Page number
+- `per_page` (integer, optional, default: 30) — Results per page
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "commits": [{ "sha": "abc123", "commit": { "message": "..." }, "author": {...} }, ...]
+  pull_requests: {
+    number: number | null;
+    title: string | null;
+    state: string | null;
+    url: string | null;
+    user: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+    draft: boolean | null;
+    additions: number | null;
+    deletions: number | null;
+    changed_files: number | null;
+  }[];
+  total_count: number;
+  page: number | null;
+  per_page: number | null;
 }
 ```
 
@@ -265,52 +838,354 @@ Returns a paginated list of commits with optional filtering.
 
 
 <details>
-<summary><code>get_commit</code> — Get a specific commit</summary>
+<summary><code>create_pull_request</code> — Create a new pull request in a GitHub repository.</summary>
 
-Returns details of a single commit including the diff.
+Create a new pull request in a GitHub repository.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `title` (string, required) — Pull request title
+- `head` (string, required) — Branch containing changes
+- `base` (string, required) — Branch to merge into
+- `body` (string, optional) — PR description (optional)
+- `draft` (boolean, optional, default: false) — Create as draft PR
+- `maintainer_can_modify` (boolean, optional, default: true) — Allow maintainer edits
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  number: number | null;
+  title: string | null;
+  state: string | null;
+  draft: boolean | null;
+  url: string | null;
+  head_branch: string | null;
+  base_branch: string | null;
+  created_at: string | null;
+  user: string | null;
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>update_pull_request</code> — Updates a pull request's title, body, state, base branch, draft status, maintainer-edit permission, or requested reviewers.</summary>
+
+Updates a pull request's title, body, state, base branch, draft status, maintainer-edit permission, or requested reviewers. Only the fields you provide are changed — others keep their current value. NOTE: this overwrites the current field values — the original state is not stored after the call. The response includes both the before and after state so you have a full record of what changed.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `pull_number` (integer, required) — Pull request number
+- `title` (string, optional) — New title (optional)
+- `body` (string, optional) — New description (optional)
+- `state` (string, optional) — 'open' or 'closed' (optional)
+- `base` (string, optional) — New base branch (optional)
+- `draft` (boolean, optional) — Mark as draft/ready (optional)
+- `maintainer_can_modify` (boolean, optional) — Allow maintainer edits (optional)
+- `reviewers` (string[], optional) — Request reviews from users (optional)
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  before: {
+    number: number | null;
+    title: string | null;
+    body: string | null;
+    state: string | null;
+    state_reason: string | null;
+    url: string | null;
+    user: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+    merged_at: string | null;
+    merged: boolean | null;
+    merge_commit_sha: string | null;
+    head: object | null;
+    base: object | null;
+    draft: boolean | null;
+    additions: number | null;
+    deletions: number | null;
+    changed_files: number | null;
+    commits: number | null;
+    labels: string[] | null;
+    assignees: string[] | null;
+    reviewers: string[] | null;
+    files: object[] | null;
+    total_files: number | null;
+    sha: string | null;
+    total_count: number | null;
+    statuses: object[] | null;
+    comments: object[] | null;
+    total_comments: number | null;
+    review_comments: object[] | null;
+    total_review_comments: number | null;
+    page: number | null;
+    per_page: number | null;
+  };
+  after: {
+    number: number | null;
+    title: string | null;
+    state: string | null;
+    draft: boolean | null;
+    url: string | null;
+    updated_at: string | null;
+  };
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>merge_pull_request</code> — Merges a pull request using the given merge method (merge, squash, or rebase).</summary>
+
+Merges a pull request using the given merge method (merge, squash, or rebase). This action is irreversible — once merged, the pull request cannot be un-merged; undoing it requires a new commit or pull request.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `pull_number` (integer, required) — Pull request number
+- `merge_method` (string, optional, default: "merge") — 'merge', 'squash', or 'rebase'
+- `commit_title` (string, optional) — Custom commit title (optional)
+- `commit_message` (string, optional) — Commit message details (optional)
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  merged: boolean | null;
+  sha: string | null;
+  message: string | null;
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>update_pull_request_branch</code> — Update pull request branch with latest changes from base branch.</summary>
+
+Update pull request branch with latest changes from base branch.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `pull_number` (integer, required) — Pull request number
+- `expected_head_sha` (string, optional) — Expected HEAD SHA (optional)
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  message: string | null;
+  url: string | null;
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>pull_request_review_write</code> — Write operations on PR reviews: create a review, submit a pending review, delete a pending review, or resolve/unresolve a review thread.</summary>
+
+Write operations on PR reviews: create a review, submit a pending review, delete a pending review, or resolve/unresolve a review thread. Select the operation via `method`. NOTE: `delete_pending` permanently discards an unsubmitted draft review and any draft comments on it — this cannot be undone.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `pull_number` (integer, required) — Pull request number
+- `method` (string, required) — create, submit_pending, delete_pending, resolve_thread, or unresolve_thread
+- `commit_id` (string, optional) — Commit SHA (required for create)
+- `body` (string, optional) — Review comment text (optional)
+- `event` (string, optional) — APPROVE, REQUEST_CHANGES, or COMMENT
+- `thread_id` (string, optional) — Thread ID for thread operations
+```
+
+**Output `data` schema:**
+
+Polymorphic shape covering all `method` variants (create / submit_pending / delete_pending / resolve_thread / unresolve_thread).
+
+```typescript
+{
+  // method="create"
+  id: number | null;
+  node_id: string | null;
+  state: string | null;
+  body: string | null;
+  user: string | null;
+  submitted_at: string | null;
+
+  // method="delete_pending"
+  deleted: boolean | null;
+  review_id: number | null;
+
+  // method="resolve_thread" / "unresolve_thread"
+  thread_id: string | null;
+  resolved: boolean | null;
+  message: string | null;
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>add_reply_to_pull_request_comment</code> — Add a reply to an existing PR comment.</summary>
+
+Add a reply to an existing PR comment.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `pull_number` (integer, required) — Pull request number
+- `comment_id` (integer, required) — ID of the comment to reply to
+- `body` (string, required) — Reply text
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  id: number | null;
+  user: string | null;
+  body: string | null;
+  created_at: string | null;
+  url: string | null;
+  in_reply_to_id: number | null;
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>request_copilot_review</code> — Request a code review from GitHub Copilot on a pull request.</summary>
+
+Request a code review from GitHub Copilot on a pull request.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `pull_number` (integer, required) — Pull request number
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  pull_number: number | null;
+  requested: boolean | null;
+  reviewer: string | null;
+  status: string | null;
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>list_branches</code> — List branches in a GitHub repository.</summary>
+
+List branches in a GitHub repository.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `page` (integer, optional, default: 1) — Page number
+- `perPage` (integer, optional, default: 30) — Items per page
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  branches: {
+    name: string | null;
+    sha: string | null;
+    protected: boolean;
+  }[];
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>list_commits</code> — List commits in a GitHub repository.</summary>
+
+List commits in a GitHub repository.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `sha` (string, optional) — Branch or commit SHA
+- `path` (string, optional) — Filter commits by path
+- `author` (string, optional) — Filter by author login
+- `since` (string, optional) — ISO 8601 date: YYYY-MM-DD
+- `until` (string, optional) — ISO 8601 date: YYYY-MM-DD
+- `page` (integer, optional, default: 1) — Page number
+- `perPage` (integer, optional, default: 30) — Items per page
+```
+
+**Output `data` schema:**
+
+```typescript
+{
+  commits: {
+    sha: string | null;
+    message: string | null;
+    author: object | null;
+    committer: object | null;
+    date: string | null;
+  }[];
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>get_commit</code> — Get details of a specific commit.</summary>
+
+Get details of a specific commit.
 
 **Inputs:**
 ```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
 - `sha` (string, required) — Commit SHA
+- `include_diff` (boolean, optional, default: true) — Include file changes in diff
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "sha": "abc123",
-  "commit": { "message": "...", "author": {...} },
-  "files": [{ "filename": "...", "additions": 5, "deletions": 2 }]
-}
-```
-
-</details>
-
-
-### Search Operations
-
-<details>
-<summary><code>search_repositories</code> — Search GitHub repositories</summary>
-
-Searches GitHub repositories using query syntax with optional sorting.
-
-**Inputs:**
-```
-- `query` (string, required) — Search query (supports GitHub search syntax)
-- `sort` (string, optional) — Sort by: stars, forks, updated, or help-wanted-issues
-- `order` (string, optional) — Sort direction: asc or desc
-- `page` (int, optional) — Page number
-- `per_page` (int, optional) — Results per page (max: 100)
-```
-
-**Output:**
-
-```json
-{
-  "total_count": 1200,
-  "items": [{ "full_name": "owner/repo", "stargazers_count": 500, ... }]
+  sha: string | null;
+  message: string | null;
+  author: object | null;
+  committer: object | null;
+  date: string | null;
+  url: string | null;
+  files: object[] | null;
 }
 ```
 
@@ -318,131 +1193,36 @@ Searches GitHub repositories using query syntax with optional sorting.
 
 
 <details>
-<summary><code>search_code</code> — Search code across GitHub</summary>
+<summary><code>get_file_contents</code> — Get file or directory contents from a GitHub repository.</summary>
 
-Searches code using GitHub's code search syntax.
-
-**Inputs:**
-```
-- `query` (string, required) — Code search query (supports GitHub code search syntax)
-- `page` (int, optional) — Page number
-- `per_page` (int, optional) — Results per page (max: 100)
-```
-
-**Output:**
-
-```json
-{
-  "total_count": 45,
-  "items": [{ "name": "file.py", "repository": { "full_name": "owner/repo" }, ... }]
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>search_users</code> — Search GitHub users</summary>
-
-Searches GitHub users by name, location, followers, or other criteria.
-
-**Inputs:**
-```
-- `query` (string, required) — User search query
-- `sort` (string, optional) — Sort by: followers, repositories, or joined
-- `order` (string, optional) — Sort direction: asc or desc
-- `page` (int, optional) — Page number
-- `per_page` (int, optional) — Results per page (max: 100)
-```
-
-**Output:**
-
-```json
-{
-  "total_count": 12,
-  "items": [{ "login": "username", "html_url": "...", "followers": 300 }]
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>search_issues</code> — Search issues and pull requests</summary>
-
-Searches issues (and PRs) across GitHub using search syntax.
-
-**Inputs:**
-```
-- `query` (string, required) — Issue search query (supports GitHub issue search syntax)
-- `sort` (string, optional) — Sort by: comments, reactions, created, updated
-- `order` (string, optional) — Sort direction: asc or desc
-- `page` (int, optional) — Page number
-- `per_page` (int, optional) — Results per page (max: 100)
-```
-
-**Output:**
-
-```json
-{
-  "total_count": 8,
-  "items": [{ "title": "Bug: ...", "state": "open", "number": 42, ... }]
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>search_pull_requests</code> — Search pull requests</summary>
-
-Searches pull requests across GitHub using search syntax.
-
-**Inputs:**
-```
-- `query` (string, required) — PR search query (supports GitHub search syntax)
-- `sort` (string, optional) — Sort by: comments, reactions, created, updated
-- `order` (string, optional) — Sort direction: asc or desc
-- `page` (int, optional) — Page number
-- `per_page` (int, optional) — Results per page (max: 100)
-```
-
-**Output:**
-
-```json
-{
-  "total_count": 3,
-  "items": [{ "title": "Add feature", "state": "open", "number": 15, ... }]
-}
-```
-
-</details>
-
-
-### Issue Operations
-
-<details>
-<summary><code>list_issues</code> — List repository issues</summary>
-
-Returns issues in a repository with optional state and label filtering.
+Get file or directory contents from a GitHub repository.
 
 **Inputs:**
 ```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `state` (string, optional) — Issue state: open, closed, or all (default: open)
-- `labels` (string, optional) — Comma-separated label names to filter by
-- `assignee` (string, optional) — Filter by assignee username
-- `milestone` (string, optional) — Filter by milestone number or title
-- `page` (int, optional) — Page number
-- `per_page` (int, optional) — Results per page (max: 100)
+- `path` (string, optional, default: "/") — File or directory path
+- `ref` (string, optional) — Branch, tag, or commit SHA
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+Polymorphic shape covering both directory and single-file responses.
+
+```typescript
 {
-  "issues": [{ "number": 42, "title": "Bug report", "state": "open", ... }]
+  type: string | null;
+
+  // directory listing
+  items: object[] | null;
+
+  // single file
+  name: string | null;
+  path: string | null;
+  size: number | null;
+  url: string | null;
+  content: string | null;
+  encoding: string | null;
 }
 ```
 
@@ -450,27 +1230,30 @@ Returns issues in a repository with optional state and label filtering.
 
 
 <details>
-<summary><code>get_issue</code> — Get a specific issue</summary>
+<summary><code>list_tags</code> — List all git tags in a repository with pagination support.</summary>
 
-Returns full details of a single issue.
+List all git tags in a repository with pagination support.
 
 **Inputs:**
 ```
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `issue_number` (int, required) — Issue number
+- `owner` (string, required) — Repository owner name.
+- `repo` (string, required) — Repository name.
+- `page` (integer, optional, default: 1) — Page number.
+- `perPage` (integer, optional, default: 30) — Number of tags per page (1-100).
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "number": 42,
-  "title": "Bug report",
-  "body": "...",
-  "state": "open",
-  "labels": [...],
-  ...
+  tags: {
+    name: string | null;
+    commit: object | null;
+    zipball_url: string | null;
+    tarball_url: string | null;
+  }[];
+  page: number | null;
+  per_page: number | null;
 }
 ```
 
@@ -478,24 +1261,25 @@ Returns full details of a single issue.
 
 
 <details>
-<summary><code>get_issue_comments</code> — List comments on an issue</summary>
+<summary><code>get_tag</code> — Get detailed information about a specific git tag.</summary>
 
-Returns paginated comments for an issue or pull request.
+Get detailed information about a specific git tag.
 
 **Inputs:**
 ```
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `issue_number` (int, required) — Issue number
-- `page` (int, optional) — Page number
-- `per_page` (int, optional) — Results per page (max: 100)
+- `owner` (string, required) — Repository owner name.
+- `repo` (string, required) — Repository name.
+- `tag` (string, required) — Tag name to retrieve.
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "comments": [{ "id": 1, "user": { "login": "..." }, "body": "..." }, ...]
+  ref: string | null;
+  node_id: string | null;
+  url: string | null;
+  object: object | null;
 }
 ```
 
@@ -503,451 +1287,9 @@ Returns paginated comments for an issue or pull request.
 
 
 <details>
-<summary><code>create_issue</code> — Create a new issue</summary>
+<summary><code>get_latest_release</code> — Get the latest release in a repository.</summary>
 
-Creates a new issue in a repository.
-
-**Inputs:**
-```
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `title` (string, required) — Issue title
-- `body` (string, optional) — Issue description (Markdown supported)
-- `assignees` (list, optional) — List of usernames to assign
-- `labels` (list, optional) — List of label names to apply
-- `milestone` (int, optional) — Milestone number to associate
-```
-
-**Output:**
-
-```json
-{
-  "number": 43,
-  "title": "New issue",
-  "html_url": "https://github.com/owner/repo/issues/43",
-  ...
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>add_issue_comment</code> — Add a comment to an issue</summary>
-
-Adds a comment to an issue or pull request.
-
-**Inputs:**
-```
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `issue_number` (int, required) — Issue or PR number
-- `body` (string, required) — Comment text (Markdown supported)
-```
-
-**Output:**
-
-```json
-{
-  "id": 101,
-  "body": "Your comment here",
-  "user": { "login": "..." }
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>update_issue</code> — Update an existing issue</summary>
-
-Updates the title, body, state, assignees, labels, or milestone of an issue.
-
-**Inputs:**
-```
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `issue_number` (int, required) — Issue number
-- `title` (string, optional) — New title
-- `body` (string, optional) — New body
-- `state` (string, optional) — New state: open or closed
-- `assignees` (list, optional) — Replacement list of assignees
-- `labels` (list, optional) — Replacement list of labels
-- `milestone` (int, optional) — Milestone number (or null to unset)
-```
-
-**Output:**
-
-```json
-{
-  "number": 42,
-  "state": "closed",
-  "title": "Updated title",
-  ...
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>sub_issue_write</code> — Manage sub-issues</summary>
-
-Adds, removes, or reprioritizes sub-issues within a parent issue.
-
-**Inputs:**
-```
-- `operation` (string, required) — Operation: add, remove, or reprioritize
-- `parent_issue_id` (int, required) — Node ID of the parent issue
-- `sub_issue_id` (int, optional) — Node ID of the sub-issue (for add/remove)
-- `after_id` (int, optional) — Sub-issue ID to insert after (for reprioritize)
-```
-
-**Output:**
-
-```json
-{
-  "success": true,
-  "parent_issue": { "number": 10, "sub_issues_count": 3 }
-}
-```
-
-</details>
-
-
-### Pull Request Operations
-
-<details>
-<summary><code>list_pull_requests</code> — List pull requests</summary>
-
-Returns pull requests in a repository with optional filtering.
-
-**Inputs:**
-```
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `state` (string, optional) — PR state: open, closed, or all (default: open)
-- `head` (string, optional) — Filter by head branch (format: user:branch)
-- `base` (string, optional) — Filter by base branch
-- `sort` (string, optional) — Sort by: created, updated, popularity, long-running
-- `direction` (string, optional) — Sort direction: asc or desc
-- `page` (int, optional) — Page number
-- `per_page` (int, optional) — Results per page (max: 100)
-```
-
-**Output:**
-
-```json
-{
-  "pull_requests": [{ "number": 15, "title": "Feature", "state": "open", ... }]
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>pull_request_read</code> — Get pull request data</summary>
-
-Retrieves PR details, changed files, status checks, comments, or reviews depending on the operation.
-
-**Inputs:**
-```
-- `operation` (string, required) — What to retrieve: details, files, status, comments, or reviews
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `pull_number` (int, required) — Pull request number
-```
-
-**Output:**
-
-```json
-{
-  "number": 15,
-  "title": "Add feature",
-  "state": "open",
-  "mergeable": true,
-  ...
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>create_pull_request</code> — Create a pull request</summary>
-
-Creates a new pull request from a head branch into a base branch.
-
-**Inputs:**
-```
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `title` (string, required) — PR title
-- `head` (string, required) — Branch with changes (format: username:branch or just branch)
-- `base` (string, required) — Branch to merge into
-- `body` (string, optional) — PR description (Markdown supported)
-- `draft` (bool, optional) — Create as draft PR (default: false)
-- `maintainer_can_modify` (bool, optional) — Allow maintainers to push to head branch
-```
-
-**Output:**
-
-```json
-{
-  "number": 16,
-  "html_url": "https://github.com/owner/repo/pull/16",
-  "state": "open",
-  ...
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>update_pull_request</code> — Update a pull request</summary>
-
-Updates the title, body, state, or base branch of a pull request.
-
-**Inputs:**
-```
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `pull_number` (int, required) — Pull request number
-- `title` (string, optional) — New title
-- `body` (string, optional) — New description
-- `state` (string, optional) — New state: open or closed
-- `base` (string, optional) — New base branch
-```
-
-**Output:**
-
-```json
-{
-  "number": 16,
-  "title": "Updated PR title",
-  "state": "open"
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>merge_pull_request</code> — Merge a pull request</summary>
-
-Merges a pull request using the specified merge method.
-
-**Inputs:**
-```
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `pull_number` (int, required) — Pull request number
-- `commit_title` (string, optional) — Title for the merge commit
-- `commit_message` (string, optional) — Message for the merge commit
-- `merge_method` (string, optional) — Merge method: merge, squash, or rebase (default: merge)
-```
-
-**Output:**
-
-```json
-{
-  "merged": true,
-  "message": "Pull Request successfully merged",
-  "sha": "merge-commit-sha"
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>update_pull_request_branch</code> — Update a PR branch with latest base</summary>
-
-Updates a pull request branch with the latest changes from the base branch.
-
-**Inputs:**
-```
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `pull_number` (int, required) — Pull request number
-```
-
-**Output:**
-
-```json
-{
-  "message": "Updating pull request branch.",
-  "url": "..."
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>pull_request_review_write</code> — Manage PR reviews</summary>
-
-Creates, submits, deletes reviews, or resolves review threads on a pull request.
-
-**Inputs:**
-```
-- `operation` (string, required) — Operation: create, submit, delete, or resolve_thread
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `pull_number` (int, required) — Pull request number
-- `review_id` (int, optional) — Review ID (required for submit/delete)
-- `body` (string, optional) — Review comment body
-- `event` (string, optional) — Review event: APPROVE, REQUEST_CHANGES, or COMMENT
-- `thread_id` (string, optional) — Thread ID to resolve
-```
-
-**Output:**
-
-```json
-{
-  "id": 200,
-  "state": "APPROVED",
-  "body": "LGTM!"
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>add_reply_to_pull_request_comment</code> — Reply to a PR review comment</summary>
-
-Adds a reply to an existing review comment on a pull request.
-
-**Inputs:**
-```
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `pull_number` (int, required) — Pull request number
-- `comment_id` (int, required) — ID of the comment to reply to
-- `body` (string, required) — Reply text (Markdown supported)
-```
-
-**Output:**
-
-```json
-{
-  "id": 202,
-  "body": "Reply text",
-  "user": { "login": "..." }
-}
-```
-
-</details>
-
-
-### Releases & Tags
-
-<details>
-<summary><code>list_tags</code> — List repository tags</summary>
-
-Returns a paginated list of tags in a repository.
-
-**Inputs:**
-```
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `page` (int, optional) — Page number
-- `per_page` (int, optional) — Results per page (max: 100)
-```
-
-**Output:**
-
-```json
-{
-  "tags": [{ "name": "v1.0.0", "commit": { "sha": "abc123" } }, ...]
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>get_tag</code> — Get a specific tag</summary>
-
-Returns details about a specific tag in a repository.
-
-**Inputs:**
-```
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `tag` (string, required) — Tag name
-```
-
-**Output:**
-
-```json
-{
-  "name": "v1.0.0",
-  "commit": { "sha": "abc123" },
-  ...
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>list_releases</code> — List repository releases</summary>
-
-Returns a list of releases published in a repository.
-
-**Inputs:**
-```
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `page` (int, optional) — Page number
-- `per_page` (int, optional) — Results per page (max: 100)
-```
-
-**Output:**
-
-```json
-{
-  "releases": [{ "tag_name": "v1.0.0", "name": "First release", "body": "..." }, ...]
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>get_release_by_tag</code> — Get a release by tag</summary>
-
-Returns the release associated with a specific tag.
-
-**Inputs:**
-```
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `tag` (string, required) — Tag name of the release
-```
-
-**Output:**
-
-```json
-{
-  "tag_name": "v1.2.0",
-  "name": "Release v1.2.0",
-  "body": "Release notes...",
-  ...
-}
-```
-
-</details>
-
-
-<details>
-<summary><code>get_latest_release</code> — Get the latest release</summary>
-
-Returns the most recent non-prerelease, non-draft release in a repository.
+Get the latest release in a repository.
 
 **Inputs:**
 ```
@@ -955,40 +1297,57 @@ Returns the most recent non-prerelease, non-draft release in a repository.
 - `repo` (string, required) — Repository name
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "tag_name": "v2.0.0",
-  "name": "Latest stable",
-  "published_at": "2024-01-01T00:00:00Z",
-  ...
+  id: number | null;
+  tag_name: string | null;
+  name: string | null;
+  draft: boolean | null;
+  prerelease: boolean | null;
+  created_at: string | null;
+  published_at: string | null;
+  url: string | null;
+  body: string | null;
+  author: string | null;
 }
 ```
 
 </details>
 
 
-### User & Organization Operations
-
 <details>
-<summary><code>get_me</code> — Get authenticated user info</summary>
+<summary><code>list_releases</code> — List releases in a repository.</summary>
 
-Returns information about the currently authenticated GitHub user.
+List releases in a repository.
 
 **Inputs:**
 ```
-None
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `page` (integer, optional, default: 1) — Page number
+- `per_page` (integer, optional, default: 30) — Results per page
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "login": "your-username",
-  "name": "Your Name",
-  "email": "you@example.com",
-  ...
+  releases: {
+    id: number | null;
+    tag_name: string | null;
+    name: string | null;
+    draft: boolean | null;
+    prerelease: boolean | null;
+    created_at: string | null;
+    published_at: string | null;
+    url: string | null;
+    author: string | null;
+  }[];
+  total_count: number;
+  page: number | null;
+  per_page: number | null;
 }
 ```
 
@@ -996,9 +1355,43 @@ None
 
 
 <details>
-<summary><code>get_label</code> — Get a repository label</summary>
+<summary><code>get_release_by_tag</code> — Get a specific release by tag name.</summary>
 
-Returns details about a specific label in a repository.
+Get a specific release by tag name.
+
+**Inputs:**
+```
+- `owner` (string, required) — Repository owner
+- `repo` (string, required) — Repository name
+- `tag` (string, required) — Tag name (e.g., 'v1.0.0')
+```
+
+**Output `data` schema:**
+
+Response shape is identical to `get_latest_release`'s output.
+
+```typescript
+{
+  id: number | null;
+  tag_name: string | null;
+  name: string | null;
+  draft: boolean | null;
+  prerelease: boolean | null;
+  created_at: string | null;
+  published_at: string | null;
+  url: string | null;
+  body: string | null;
+  author: string | null;
+}
+```
+
+</details>
+
+
+<details>
+<summary><code>get_label</code> — Get a specific label from a repository.</summary>
+
+Get a specific label from a repository.
 
 **Inputs:**
 ```
@@ -1007,13 +1400,15 @@ Returns details about a specific label in a repository.
 - `name` (string, required) — Label name
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "name": "bug",
-  "color": "d73a4a",
-  "description": "Something isn't working"
+  id: number | null;
+  name: string | null;
+  color: string | null;
+  description: string | null;
+  url: string | null;
 }
 ```
 
@@ -1021,49 +1416,32 @@ Returns details about a specific label in a repository.
 
 
 <details>
-<summary><code>list_org_repositories_by_contributor</code> — Find org repos by contributor</summary>
+<summary><code>get_me</code> — Get details of the authenticated GitHub user.</summary>
 
-Lists repositories within an organization where a specific user has contributed.
+Get details of the authenticated GitHub user.
 
 **Inputs:**
-```
-- `org` (string, required) — Organization name
-- `username` (string, required) — GitHub username to search for contributions
-```
 
-**Output:**
+_This tool takes no parameters._
 
-```json
+**Output `data` schema:**
+
+```typescript
 {
-  "repositories": [{ "name": "repo-name", "full_name": "org/repo-name", ... }]
-}
-```
-
-</details>
-
-
-### GitHub Copilot Operations
-
-<details>
-<summary><code>assign_copilot_to_issue</code> — Assign Copilot to an issue</summary>
-
-Assigns GitHub Copilot as an assignee to work on an issue, with optional custom instructions.
-
-**Inputs:**
-```
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `issue_number` (int, required) — Issue number
-- `instructions` (string, optional) — Custom instructions for Copilot
-```
-
-**Output:**
-
-```json
-{
-  "success": true,
-  "issue_number": 42,
-  "assignee": "copilot"
+  id: number | null;
+  login: string | null;
+  name: string | null;
+  email: string | null;
+  bio: string | null;
+  company: string | null;
+  location: string | null;
+  public_repos: number;
+  followers: number;
+  following: number;
+  created_at: string | null;
+  updated_at: string | null;
+  avatar_url: string | null;
+  profile_url: string | null;
 }
 ```
 
@@ -1071,36 +1449,9 @@ Assigns GitHub Copilot as an assignee to work on an issue, with optional custom 
 
 
 <details>
-<summary><code>request_copilot_review</code> — Request a Copilot PR review</summary>
+<summary><code>get_branch_protection</code> — Get branch protection rules for a specific branch.</summary>
 
-Requests GitHub Copilot to review a pull request.
-
-**Inputs:**
-```
-- `owner` (string, required) — Repository owner
-- `repo` (string, required) — Repository name
-- `pull_number` (int, required) — Pull request number
-```
-
-**Output:**
-
-```json
-{
-  "success": true,
-  "pull_number": 16,
-  "reviewer": "copilot"
-}
-```
-
-</details>
-
-
-### Branch Protection & Rulesets
-
-<details>
-<summary><code>get_branch_protection</code> — Get branch protection rules</summary>
-
-Returns all protection rules configured for a specific branch.
+Get branch protection rules for a specific branch.
 
 **Inputs:**
 ```
@@ -1109,25 +1460,23 @@ Returns all protection rules configured for a specific branch.
 - `branch` (string, required) — Branch name
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "url": "https://api.github.com/repos/owner/repo/branches/main/protection",
-  "required_status_checks": { "strict": true, "contexts": ["ci/test"] },
-  "enforce_admins": true,
-  "required_pull_request_reviews": {
-    "dismiss_stale_reviews": true,
-    "require_code_owner_reviews": false,
-    "required_approving_review_count": 1,
-    "require_last_push_approval": false,
-    "dismissal_restrictions": { "users": [], "teams": [] }
-  },
-  "restrictions": null,
-  "required_linear_history": false,
-  "allow_force_pushes": false,
-  "allow_deletions": false,
-  "required_conversation_resolution": true
+  url: string | null;
+  required_status_checks: object | null;
+  enforce_admins: boolean | null;
+  required_pull_request_reviews: object | null;
+  restrictions: object | null;
+  required_linear_history: boolean | null;
+  allow_force_pushes: boolean | null;
+  allow_deletions: boolean | null;
+  block_creations: boolean | null;
+  required_conversation_resolution: boolean | null;
+  required_signatures: boolean | null;
+  lock_branch: boolean | null;
+  allow_fork_syncing: boolean | null;
 }
 ```
 
@@ -1135,40 +1484,40 @@ Returns all protection rules configured for a specific branch.
 
 
 <details>
-<summary><code>set_branch_protection</code> — Create or replace branch protection rules</summary>
+<summary><code>set_branch_protection</code> — Set (create or replace) branch protection rules for a branch.</summary>
 
-Creates or fully replaces branch protection rules for a branch (PUT). Complex nested objects are passed as JSON strings.
+Set (create or replace) branch protection rules for a branch.
 
 **Inputs:**
 ```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `branch` (string, required) — Branch to protect
-- `enforce_admins` (bool, required) — Apply rules to administrators
-- `required_status_checks_json` (string, optional) — JSON: {"strict": bool, "contexts": [...]}
-- `required_pull_request_reviews_json` (string, optional) — JSON: {"required_approving_review_count": int, ...}
-- `restrictions_json` (string, optional) — JSON: {"users": [...], "teams": [...], "apps": [...]}
-- `required_linear_history` (bool, optional) — Require linear commit history (default: false)
-- `allow_force_pushes` (bool, optional) — Allow force pushes (default: GitHub default)
-- `allow_deletions` (bool, optional) — Allow branch deletion (default: false)
-- `block_creations` (bool, optional) — Block matching ref creation (default: false)
-- `required_conversation_resolution` (bool, optional) — Require resolved conversations (default: false)
-- `lock_branch` (bool, optional) — Make branch read-only (default: false)
-- `allow_fork_syncing` (bool, optional) — Allow forks to sync with upstream (default: false)
+- `branch` (string, required) — Branch name
+- `enforce_admins` (boolean, required) — Enforce for admins
+- `required_status_checks` (object, optional) — Required status checks config
+- `required_pull_request_reviews` (object, optional) — Required PR reviews config
+- `restrictions` (object, optional) — User/team restrictions
+- `required_linear_history` (boolean, optional, default: false) — Require linear history
+- `allow_force_pushes` (boolean, optional) — Allow force pushes
+- `allow_deletions` (boolean, optional, default: false) — Allow deletions
+- `block_creations` (boolean, optional, default: false) — Block creations
+- `required_conversation_resolution` (boolean, optional, default: false) — Require conversation resolution
+- `lock_branch` (boolean, optional, default: false) — Lock branch
+- `allow_fork_syncing` (boolean, optional, default: false) — Allow fork syncing
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "url": "https://api.github.com/repos/owner/repo/branches/main/protection",
-  "branch": "main",
-  "enforce_admins": true,
-  "required_linear_history": false,
-  "allow_force_pushes": false,
-  "allow_deletions": false,
-  "required_conversation_resolution": true,
-  "lock_branch": false
+  url: string | null;
+  branch: string | null;
+  enforce_admins: boolean | null;
+  required_linear_history: boolean | null;
+  allow_force_pushes: boolean | null;
+  allow_deletions: boolean | null;
+  required_conversation_resolution: boolean | null;
+  lock_branch: boolean | null;
 }
 ```
 
@@ -1176,9 +1525,9 @@ Creates or fully replaces branch protection rules for a branch (PUT). Complex ne
 
 
 <details>
-<summary><code>delete_branch_protection</code> — Delete branch protection rules</summary>
+<summary><code>delete_branch_protection</code> — DESTRUCTIVE — REQUIRES EXPLICIT USER CONFIRMATION BEFORE CALLING.</summary>
 
-Removes all protection rules from a branch.
+DESTRUCTIVE — REQUIRES EXPLICIT USER CONFIRMATION BEFORE CALLING. Permanently deletes all branch protection rules for the given branch. This action is irreversible — the branch protection configuration (required status checks, required reviews, restrictions, and all other settings) cannot be recovered once deleted. NEVER call this tool autonomously or as part of an automated flow. You MUST stop, tell the user exactly what will be deleted and that it is permanent, and wait for their explicit written confirmation before proceeding.
 
 **Inputs:**
 ```
@@ -1187,12 +1536,12 @@ Removes all protection rules from a branch.
 - `branch` (string, required) — Branch name
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "deleted": true,
-  "branch": "main"
+  deleted: boolean | null;
+  branch: string | null;
 }
 ```
 
@@ -1200,9 +1549,9 @@ Removes all protection rules from a branch.
 
 
 <details>
-<summary><code>get_pull_request_review_protection</code> — Get PR review requirements</summary>
+<summary><code>get_pull_request_review_protection</code> — Get PR review requirements for a protected branch.</summary>
 
-Returns the pull request review requirements configured for a protected branch.
+Get PR review requirements for a protected branch.
 
 **Inputs:**
 ```
@@ -1211,16 +1560,16 @@ Returns the pull request review requirements configured for a protected branch.
 - `branch` (string, required) — Branch name
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "url": "https://api.github.com/repos/owner/repo/branches/main/protection/required_pull_request_reviews",
-  "dismiss_stale_reviews": true,
-  "require_code_owner_reviews": true,
-  "required_approving_review_count": 2,
-  "require_last_push_approval": false,
-  "dismissal_restrictions": { "users": [], "teams": [] }
+  url: string | null;
+  dismiss_stale_reviews: boolean | null;
+  require_code_owner_reviews: boolean | null;
+  required_approving_review_count: number | null;
+  require_last_push_approval: boolean | null;
+  dismissal_restrictions: object | null;
 }
 ```
 
@@ -1228,31 +1577,42 @@ Returns the pull request review requirements configured for a protected branch.
 
 
 <details>
-<summary><code>update_pull_request_review_protection</code> — Update PR review requirements</summary>
+<summary><code>update_pull_request_review_protection</code> — Updates the pull request review requirements for a protected branch.</summary>
 
-Updates only the specified PR review fields for a protected branch (PATCH).
+Updates the pull request review requirements for a protected branch. Only the fields you provide are changed — others keep their current value. NOTE: this overwrites the current field values — the original state is not stored after the call. The response includes both the before and after state so you have a full record of what changed.
 
 **Inputs:**
 ```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
 - `branch` (string, required) — Branch name
-- `dismiss_stale_reviews` (bool, optional) — Dismiss approvals on new commits
-- `require_code_owner_reviews` (bool, optional) — Require review from code owners
-- `required_approving_review_count` (int, optional) — Required approvals (0–6)
-- `require_last_push_approval` (bool, optional) — Require approval from non-last-pusher
-- `dismissal_restrictions_json` (string, optional) — JSON: {"users": [...], "teams": [...]}
+- `dismiss_stale_reviews` (boolean, optional) — Dismiss stale reviews
+- `require_code_owner_reviews` (boolean, optional) — Require code owner reviews
+- `required_approving_review_count` (integer, optional) — Required approving reviews
+- `require_last_push_approval` (boolean, optional) — Require last push approval
+- `dismissal_restrictions` (object, optional) — Dismissal restrictions
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "dismiss_stale_reviews": true,
-  "require_code_owner_reviews": true,
-  "required_approving_review_count": 2,
-  "require_last_push_approval": false,
-  "dismissal_restrictions": { "users": [], "teams": [] }
+  before: {
+    url: string | null;
+    dismiss_stale_reviews: boolean | null;
+    require_code_owner_reviews: boolean | null;
+    required_approving_review_count: number | null;
+    require_last_push_approval: boolean | null;
+    dismissal_restrictions: object | null;
+  };
+  after: {
+    url: string | null;
+    dismiss_stale_reviews: boolean | null;
+    require_code_owner_reviews: boolean | null;
+    required_approving_review_count: number | null;
+    require_last_push_approval: boolean | null;
+    dismissal_restrictions: object | null;
+  };
 }
 ```
 
@@ -1260,9 +1620,9 @@ Updates only the specified PR review fields for a protected branch (PATCH).
 
 
 <details>
-<summary><code>delete_pull_request_review_protection</code> — Remove PR review requirements</summary>
+<summary><code>delete_pull_request_review_protection</code> — DESTRUCTIVE — REQUIRES EXPLICIT USER CONFIRMATION BEFORE CALLING.</summary>
 
-Removes pull request review requirements from a protected branch.
+DESTRUCTIVE — REQUIRES EXPLICIT USER CONFIRMATION BEFORE CALLING. Permanently removes the pull request review requirements from the given protected branch. This action is irreversible — the review requirement configuration (required approving review count, dismissal restrictions, code owner review requirement, and all other settings) cannot be recovered once deleted. NEVER call this tool autonomously or as part of an automated flow. You MUST stop, tell the user exactly what will be deleted and that it is permanent, and wait for their explicit written confirmation before proceeding.
 
 **Inputs:**
 ```
@@ -1271,12 +1631,12 @@ Removes pull request review requirements from a protected branch.
 - `branch` (string, required) — Branch name
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "deleted": true,
-  "branch": "main"
+  deleted: boolean | null;
+  branch: string | null;
 }
 ```
 
@@ -1284,34 +1644,35 @@ Removes pull request review requirements from a protected branch.
 
 
 <details>
-<summary><code>list_repository_rulesets</code> — List repository rulesets</summary>
+<summary><code>list_repository_rulesets</code> — List all rulesets for a repository.</summary>
 
-Returns all rulesets defined for a repository, optionally including those inherited from the parent organization.
+List all rulesets for a repository.
 
 **Inputs:**
 ```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `includes_parents` (bool, optional) — Include parent org rulesets (default: true)
-- `page` (int, optional) — Page number (default: 1)
-- `per_page` (int, optional) — Results per page (default: 30)
+- `includes_parents` (boolean, optional, default: true) — Include parent rulesets
+- `per_page` (integer, optional, default: 30) — Results per page
+- `page` (integer, optional, default: 1) — Page number
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "rulesets": [
-    {
-      "id": 42,
-      "name": "Require PR reviews on main",
-      "target": "branch",
-      "source_type": "Repository",
-      "enforcement": "active",
-      "created_at": "2024-01-15T10:00:00Z",
-      "updated_at": "2024-06-01T08:00:00Z"
-    }
-  ]
+  rulesets: {
+    id: number | null;
+    name: string | null;
+    target: string | null;
+    source_type: string | null;
+    enforcement: string | null;
+    node_id: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+  }[];
+  page: number | null;
+  per_page: number | null;
 }
 ```
 
@@ -1319,28 +1680,33 @@ Returns all rulesets defined for a repository, optionally including those inheri
 
 
 <details>
-<summary><code>get_repository_ruleset</code> — Get a repository ruleset</summary>
+<summary><code>get_repository_ruleset</code> — Get a specific ruleset for a repository.</summary>
 
-Returns a specific ruleset with its full conditions, rules, and bypass actors.
+Get a specific ruleset for a repository.
 
 **Inputs:**
 ```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `ruleset_id` (int, required) — Ruleset ID
+- `ruleset_id` (integer, required) — Ruleset ID
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "id": 42,
-  "name": "Require PR reviews on main",
-  "target": "branch",
-  "enforcement": "active",
-  "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
-  "rules": [{ "type": "pull_request", "parameters": { "required_approving_review_count": 1 } }],
-  "bypass_actors": []
+  id: number | null;
+  name: string | null;
+  target: string | null;
+  source_type: string | null;
+  source: string | null;
+  enforcement: string | null;
+  conditions: object | null;
+  rules: object[];
+  bypass_actors: object[];
+  node_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 }
 ```
 
@@ -1348,9 +1714,9 @@ Returns a specific ruleset with its full conditions, rules, and bypass actors.
 
 
 <details>
-<summary><code>create_repository_ruleset</code> — Create a repository ruleset</summary>
+<summary><code>create_repository_ruleset</code> — Create a new ruleset for a repository.</summary>
 
-Creates a new ruleset for a repository. Pass conditions, rules, and bypass actors as JSON strings.
+Create a new ruleset for a repository.
 
 **Inputs:**
 ```
@@ -1358,23 +1724,26 @@ Creates a new ruleset for a repository. Pass conditions, rules, and bypass actor
 - `repo` (string, required) — Repository name
 - `name` (string, required) — Ruleset name
 - `enforcement` (string, required) — active, evaluate, or disabled
-- `target` (string, optional) — branch, tag, or push (default: branch)
-- `conditions_json` (string, optional) — JSON ref conditions, e.g. {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}}
-- `rules_json` (string, optional) — JSON array of rule objects, e.g. [{"type": "pull_request", "parameters": {...}}]
-- `bypass_actors_json` (string, optional) — JSON array of bypass actors, e.g. [{"actor_id": 1, "actor_type": "Team", "bypass_mode": "always"}]
+- `target` (string, optional, default: "branch") — Target: branch, tag, or push
+- `conditions` (object, optional) — Ruleset conditions
+- `rules` (object[], optional) — Rules list
+- `bypass_actors` (object[], optional) — Bypass actors
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "id": 43,
-  "name": "Block force pushes",
-  "target": "branch",
-  "enforcement": "active",
-  "conditions": { "ref_name": { "include": ["~ALL"], "exclude": [] } },
-  "rules": [{ "type": "non_fast_forward" }],
-  "bypass_actors": []
+  id: number | null;
+  name: string | null;
+  target: string | null;
+  enforcement: string | null;
+  conditions: object | null;
+  rules: object[];
+  bypass_actors: object[];
+  node_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 }
 ```
 
@@ -1382,31 +1751,53 @@ Creates a new ruleset for a repository. Pass conditions, rules, and bypass actor
 
 
 <details>
-<summary><code>update_repository_ruleset</code> — Update a repository ruleset</summary>
+<summary><code>update_repository_ruleset</code> — Updates an existing repository ruleset.</summary>
 
-Replaces an existing ruleset (PUT). Only fields provided are sent to GitHub.
+Updates an existing repository ruleset. Only the fields you provide are changed — others keep their current value. NOTE: this overwrites the current field values — the original state is not stored after the call. The response includes both the before and after state so you have a full record of what changed.
 
 **Inputs:**
 ```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `ruleset_id` (int, required) — Ruleset ID to update
+- `ruleset_id` (integer, required) — Ruleset ID
 - `name` (string, optional) — New ruleset name
 - `enforcement` (string, optional) — active, evaluate, or disabled
-- `target` (string, optional) — branch, tag, or push
-- `conditions_json` (string, optional) — JSON ref conditions
-- `rules_json` (string, optional) — JSON array of rule objects
-- `bypass_actors_json` (string, optional) — JSON array of bypass actors
+- `target` (string, optional) — Updated target: branch, tag, or push
+- `conditions` (object, optional) — Updated conditions
+- `rules` (object[], optional) — Updated rules
+- `bypass_actors` (object[], optional) — Updated bypass actors
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "id": 42,
-  "name": "Require PR reviews on main",
-  "enforcement": "active",
-  "rules": [{ "type": "pull_request", "parameters": { "required_approving_review_count": 2 } }]
+  before: {
+    id: number | null;
+    name: string | null;
+    target: string | null;
+    source_type: string | null;
+    source: string | null;
+    enforcement: string | null;
+    conditions: object | null;
+    rules: object[];
+    bypass_actors: object[];
+    node_id: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+  };
+  after: {
+    id: number | null;
+    name: string | null;
+    target: string | null;
+    enforcement: string | null;
+    conditions: object | null;
+    rules: object[];
+    bypass_actors: object[];
+    node_id: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+  };
 }
 ```
 
@@ -1414,23 +1805,23 @@ Replaces an existing ruleset (PUT). Only fields provided are sent to GitHub.
 
 
 <details>
-<summary><code>delete_repository_ruleset</code> — Delete a repository ruleset</summary>
+<summary><code>delete_repository_ruleset</code> — DESTRUCTIVE — REQUIRES EXPLICIT USER CONFIRMATION BEFORE CALLING.</summary>
 
-Deletes a ruleset from a repository by ID.
+DESTRUCTIVE — REQUIRES EXPLICIT USER CONFIRMATION BEFORE CALLING. Permanently deletes the specified ruleset from the repository. This action is irreversible — the ruleset configuration (conditions, rules, and bypass actors) cannot be recovered once deleted. NEVER call this tool autonomously or as part of an automated flow. You MUST stop, tell the user exactly what will be deleted and that it is permanent, and wait for their explicit written confirmation before proceeding.
 
 **Inputs:**
 ```
 - `owner` (string, required) — Repository owner
 - `repo` (string, required) — Repository name
-- `ruleset_id` (int, required) — Ruleset ID to delete
+- `ruleset_id` (integer, required) — Ruleset ID
 ```
 
-**Output:**
+**Output `data` schema:**
 
-```json
+```typescript
 {
-  "deleted": true,
-  "ruleset_id": 42
+  deleted: boolean | null;
+  ruleset_id: number | null;
 }
 ```
 
@@ -1440,41 +1831,50 @@ Deletes a ruleset from a repository by ID.
 ## API Parameters Reference
 
 <details>
-<summary><strong>Pagination Parameters</strong></summary>
+<summary><strong>Response Envelope</strong></summary>
 
-Most list endpoints support pagination:
+Every tool returns the same top-level envelope. Only `data` varies per tool.
 
-- `page` — Page number (starting from 1)
-- `per_page` — Results per page (default: 30, max: 100)
+```json
+// Success
+{
+  "success": true,
+  "statusCode": 200,
+  "retriable": false,
+  "retry_after_seconds": null,
+  "error": null,
+  "data": { ... }
+}
+
+// Error
+{
+  "success": false,
+  "statusCode": 400,
+  "retriable": false,
+  "retry_after_seconds": null,
+  "error": { "code": "{ERROR_CODE}", "message": "{description}", "details": {} },
+  "data": null
+}
+```
+
+- `retriable` — `true` when it is safe to retry (rate limit, network error, 503). `false` for validation and auth errors.
+- `retry_after_seconds` — seconds to wait before retrying; present only when `retriable` is `true` and the upstream specifies a delay.
+- `error.code` — machine-readable string: `VALIDATION_ERROR`, `AUTH_ERROR`, `UPSTREAM_ERROR`, `SERVER_ERROR`.
 
 </details>
 
 <details>
-<summary><strong>GitHub Search Syntax</strong></summary>
+<summary><strong>Common Parameters</strong></summary>
 
-Search tools support GitHub's full query syntax:
-
-```
-language:python stars:>1000        — Repos with Python, 1000+ stars
-repo:owner/repo is:open label:bug  — Open bug issues in a specific repo
-author:username created:>2024-01-01 — Commits by author after date
-```
-
-Full syntax reference: [GitHub Search Documentation](https://docs.github.com/en/search-github/searching-on-github)
+- `owner` — Repository owner, used across almost every tool that operates on a repository.
+- `repo` — Repository name, paired with `owner` on almost every tool that operates on a repository.
+- `page` — Page number for paginated list/search endpoints (default: 1 on all tools that support it).
+- `perPage` / `per_page` — Items or results per page for paginated list/search endpoints (default: 30 where applicable; the parameter name varies by tool — see each tool's Inputs above).
 
 </details>
 
-<details>
-<summary><strong>Date/Time Format</strong></summary>
 
-All datetime parameters use ISO 8601 format:
-
-```
-Format: YYYY-MM-DDTHH:MM:SSZ
-Example: 2024-01-15T10:30:00Z
-```
-
-</details>
+<!-- OAuth provider: "Getting Your API Key" section intentionally omitted. -->
 
 
 ## Troubleshooting
@@ -1482,10 +1882,10 @@ Example: 2024-01-15T10:30:00Z
 <details>
 <summary><strong>Missing or Invalid Headers</strong></summary>
 
-- **Cause:** OAuth token not provided in request headers or incorrect format
+- **Cause:** API key not provided in request headers or incorrect format
 - **Solution:**
-  1. Verify `Authorization: Bearer YOUR_TOKEN` and `X-Mewcp-Credential-Id: CREDENTIAL-ID` headers are present
-  2. Check your GitHub OAuth credential is active in your MewCP account
+  1. Verify `Authorization: Bearer YOUR_API_KEY` and `X-Mewcp-Credential-Id: CREDENTIAL-ID` headers are present
+  2. Check API key is active in your MewCP account
 
 </details>
 
@@ -1506,7 +1906,7 @@ Example: 2024-01-15T10:30:00Z
 - **Cause:** No GitHub credential linked to your account
 - **Solution:**
   1. Go to **Credentials** in your MewCP dashboard
-  2. Connect your GitHub account via OAuth
+  2. Connect your GitHub account (OAuth) or add your API key (static)
   3. Retry the request with the correct `X-Mewcp-Credential-Id` header
 
 </details>
@@ -1517,7 +1917,7 @@ Example: 2024-01-15T10:30:00Z
 - **Cause:** JSON payload is invalid or missing required fields
 - **Solution:**
   1. Validate JSON syntax before sending
-  2. Ensure all required tool parameters (owner, repo, etc.) are included
+  2. Ensure all required tool parameters are included
   3. Check parameter types match expected values
 
 </details>
@@ -1538,17 +1938,21 @@ Example: 2024-01-15T10:30:00Z
 
 - **Cause:** Upstream GitHub API returned an error
 - **Solution:**
-  1. Check GitHub service status at [GitHub Status](https://githubstatus.com)
-  2. Verify your OAuth token has the required scopes for the operation (e.g. `repo`, `read:org`)
-  3. Review the error message returned in the response for specific details
+  1. Check GitHub service status at [GitHub Status Page](https://www.githubstatus.com/)
+  2. Verify your credential has the required permissions (OAuth scopes)
+  3. Review the error message for specific details
 
 </details>
 
 ---
 
-### Resources
+<details>
+<summary><strong>Resources</strong></summary>
 
 - **[GitHub REST API Documentation](https://docs.github.com/en/rest)** — Official API reference
-- **[GitHub Search Syntax](https://docs.github.com/en/search-github/searching-on-github)** — Complete search query reference
+- **[GitHub REST API Endpoints](https://docs.github.com/en/rest/quickstart)** — Complete endpoint reference
 - **[FastMCP Docs](https://gofastmcp.com/v2/getting-started/welcome)** — FastMCP specification
 - **[FastMCP Credentials](https://pypi.org/project/fastmcp-credentials/)** — FastMCP Credentials package for credential handling
+
+
+</details>
