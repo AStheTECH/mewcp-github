@@ -1872,9 +1872,6 @@ Every tool returns the same top-level envelope. Only `data` varies per tool.
 </details>
 
 
-<!-- OAuth provider: "Getting Your API Key" section intentionally omitted. -->
-
-
 ## Troubleshooting
 
 <details>
