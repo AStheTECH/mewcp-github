@@ -5,9 +5,10 @@ import logging
 
 from fastmcp import FastMCP
 from fastmcp_credentials import CredentialMiddleware, HeaderCredentialBackend
+from starlette.responses import JSONResponse
 
 from github_mcp.cli import parse_args
-from github_mcp.config import configure_logging
+from github_mcp.config import BREAKING_CHANGES, SERVER_VERSION, configure_logging
 from github_mcp.tools import register_tools
 
 configure_logging()
@@ -15,9 +16,23 @@ logger = logging.getLogger("github-mcp-server")
 
 backend = HeaderCredentialBackend()
 mcp = FastMCP(
-    "MewCP GitHub MCP Server", middleware=[CredentialMiddleware(backend, "oauth")]
+    "MewCP GitHub MCP Server",
+    version=SERVER_VERSION,
+    middleware=[CredentialMiddleware(backend, "oauth")],
 )
 register_tools(mcp)
+
+
+# /health MUST come before mcp.http_app() — routes are baked at http_app() time
+@mcp.custom_route("/health", methods=["GET"])
+async def health_check(request):
+    return JSONResponse({
+        "status": "healthy",
+        "service": mcp.name,
+        "version": SERVER_VERSION,
+        "breaking_changes": BREAKING_CHANGES,
+    })
+
 
 # Expose ASGI app for hosted runtimes.
 app = mcp.http_app(path="/mcp", transport="streamable-http", stateless_http=True)

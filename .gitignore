@@ -9,4 +9,8 @@ oauth_script.py
 .github
 /.github/*
 env
-
+.python-version
+main.py
+pyproject.toml
+update_state.json
+uv.lock
