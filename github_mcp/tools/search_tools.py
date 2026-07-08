@@ -1,18 +1,28 @@
-import json
 import logging
 from fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from ..schemas import ToolError, ToolResult
+from ..schemas import (
+    SearchRepositoriesResult,
+    SearchRepositoriesData,
+    SearchCodeResult,
+    SearchCodeData,
+    SearchUsersResult,
+    SearchUsersData,
+    SearchIssuesResult,
+    SearchIssuesData,
+    SearchPullRequestsResult,
+    SearchPullRequestsData,
+)
 from ..logging_utils import ToolLogger
-from ._helpers import _err, _handle_request_exc, _upstream_err
+from ._helpers import _err, _handle_service_exc
 from ..service import (
     search_repositories,
     search_code,
     search_users,
     search_issues,
     search_pull_requests,
-    GitHubServiceError,
 )
 
 logger = logging.getLogger("github-mcp-server")
@@ -23,6 +33,7 @@ def register_search_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="search_repositories",
         description="Search GitHub repositories.",
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True),
     )
     def search_repositories_tool(
         query: str = Field(..., description="Search query"),
@@ -30,28 +41,19 @@ def register_search_tools(mcp: FastMCP) -> None:
         order: str = Field("desc", description="Order: asc or desc"),
         page: int = Field(1, description="Page number"),
         perPage: int = Field(30, description="Items per page"),
-    ) -> str:
+    ) -> SearchRepositoriesResult:
         tlog = ToolLogger(logger, "search_repositories")
         try:
             data = search_repositories(query, sort=sort, order=order, page=page, per_page=perPage)
             tlog.success()
-            return json.dumps(ToolResult(success=True, statusCode=200, data=data).model_dump(mode="json"))
-        except GitHubServiceError as exc:
-            tlog.failure(exc.code, exc.message)
-            return json.dumps(ToolResult(
-                success=False, statusCode=exc.http_status or 400,
-                error=ToolError(code=exc.code, message=exc.message, details=exc.details),
-            ).model_dump(mode="json"))
+            return SearchRepositoriesResult(success=True, statusCode=200, data=SearchRepositoriesData(**data))
         except Exception as exc:
-            tlog.failure("INTERNAL_ERROR", str(exc))
-            return json.dumps(ToolResult(
-                success=False, statusCode=500,
-                error=ToolError(code="INTERNAL_ERROR", message="Unexpected error while searching repositories.", details={"exception": str(exc)}),
-            ).model_dump(mode="json"))
+            return _handle_service_exc(SearchRepositoriesResult, tlog, exc)
 
     @mcp.tool(
         name="search_code",
         description="Fast and precise code search across GitHub repositories.",
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True),
     )
     def search_code_tool(
         query: str = Field(..., description="Search query using GitHub code search syntax."),
@@ -59,28 +61,19 @@ def register_search_tools(mcp: FastMCP) -> None:
         order: str = Field("desc", description="Sort order: asc or desc."),
         page: int = Field(1, description="Page number."),
         perPage: int = Field(30, description="Results per page (1-100)."),
-    ) -> str:
+    ) -> SearchCodeResult:
         tlog = ToolLogger(logger, "search_code")
         try:
             data = search_code(query, sort=sort, order=order, page=page, per_page=perPage)
             tlog.success()
-            return json.dumps(ToolResult(success=True, statusCode=200, data=data).model_dump(mode="json"))
-        except GitHubServiceError as exc:
-            tlog.failure(exc.code, exc.message)
-            return json.dumps(ToolResult(
-                success=False, statusCode=exc.http_status or 400,
-                error=ToolError(code=exc.code, message=exc.message, details=exc.details),
-            ).model_dump(mode="json"))
+            return SearchCodeResult(success=True, statusCode=200, data=SearchCodeData(**data))
         except Exception as exc:
-            tlog.failure("INTERNAL_ERROR", str(exc))
-            return json.dumps(ToolResult(
-                success=False, statusCode=500,
-                error=ToolError(code="INTERNAL_ERROR", message="Unexpected error while searching code.", details={"exception": str(exc)}),
-            ).model_dump(mode="json"))
+            return _handle_service_exc(SearchCodeResult, tlog, exc)
 
     @mcp.tool(
         name="search_users",
         description="Search GitHub users by name, location, followers, or other attributes.",
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True),
     )
     def search_users_tool(
         query: str = Field(..., description="User search query using GitHub's search syntax."),
@@ -88,28 +81,19 @@ def register_search_tools(mcp: FastMCP) -> None:
         order: str = Field("desc", description="Sort order: asc or desc."),
         page: int = Field(1, description="Page number."),
         perPage: int = Field(30, description="Results per page (1-100)."),
-    ) -> str:
+    ) -> SearchUsersResult:
         tlog = ToolLogger(logger, "search_users")
         try:
             data = search_users(query, sort=sort, order=order, page=page, per_page=perPage)
             tlog.success()
-            return json.dumps(ToolResult(success=True, statusCode=200, data=data).model_dump(mode="json"))
-        except GitHubServiceError as exc:
-            tlog.failure(exc.code, exc.message)
-            return json.dumps(ToolResult(
-                success=False, statusCode=exc.http_status or 400,
-                error=ToolError(code=exc.code, message=exc.message, details=exc.details),
-            ).model_dump(mode="json"))
+            return SearchUsersResult(success=True, statusCode=200, data=SearchUsersData(**data))
         except Exception as exc:
-            tlog.failure("INTERNAL_ERROR", str(exc))
-            return json.dumps(ToolResult(
-                success=False, statusCode=500,
-                error=ToolError(code="INTERNAL_ERROR", message="Unexpected error while searching users.", details={"exception": str(exc)}),
-            ).model_dump(mode="json"))
+            return _handle_service_exc(SearchUsersResult, tlog, exc)
 
     @mcp.tool(
         name="search_issues",
         description="Search issues and pull requests across GitHub.",
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True),
     )
     def search_issues_tool(
         query: str = Field(..., description="Search query using GitHub issue search syntax."),
@@ -119,28 +103,19 @@ def register_search_tools(mcp: FastMCP) -> None:
         repo: str | None = Field(None, description="Repository name (optional)."),
         page: int = Field(1, description="Page number."),
         perPage: int = Field(30, description="Results per page (1-100)."),
-    ) -> str:
+    ) -> SearchIssuesResult:
         tlog = ToolLogger(logger, "search_issues")
         try:
             data = search_issues(query, sort=sort, order=order, owner=owner, repo=repo, page=page, per_page=perPage)
             tlog.success()
-            return json.dumps(ToolResult(success=True, statusCode=200, data=data).model_dump(mode="json"))
-        except GitHubServiceError as exc:
-            tlog.failure(exc.code, exc.message)
-            return json.dumps(ToolResult(
-                success=False, statusCode=exc.http_status or 400,
-                error=ToolError(code=exc.code, message=exc.message, details=exc.details),
-            ).model_dump(mode="json"))
+            return SearchIssuesResult(success=True, statusCode=200, data=SearchIssuesData(**data))
         except Exception as exc:
-            tlog.failure("INTERNAL_ERROR", str(exc))
-            return json.dumps(ToolResult(
-                success=False, statusCode=500,
-                error=ToolError(code="INTERNAL_ERROR", message="Unexpected error while searching issues.", details={"exception": str(exc)}),
-            ).model_dump(mode="json"))
+            return _handle_service_exc(SearchIssuesResult, tlog, exc)
 
     @mcp.tool(
         name="search_pull_requests",
         description="Search for pull requests across GitHub using search syntax.",
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True),
     )
     def search_prs(
         query: str = Field(..., description="Search query using GitHub search syntax."),
@@ -150,21 +125,11 @@ def register_search_tools(mcp: FastMCP) -> None:
         repo: str | None = Field(None, description="Repository name (optional)."),
         page: int = Field(1, description="Page number."),
         per_page: int = Field(30, description="Results per page."),
-    ) -> str:
+    ) -> SearchPullRequestsResult:
         tlog = ToolLogger(logger, "search_pull_requests")
         try:
             result = search_pull_requests(query=query, sort=sort, order=order, owner=owner, repo=repo, page=page, per_page=per_page)
             tlog.success()
-            return json.dumps(ToolResult(success=True, statusCode=200, data=result).model_dump(mode="json"))
-        except GitHubServiceError as exc:
-            tlog.failure(exc.code, exc.message)
-            return json.dumps(ToolResult(
-                success=False, statusCode=exc.http_status or 400,
-                error=ToolError(code=exc.code, message=exc.message, details=exc.details),
-            ).model_dump(mode="json"))
+            return SearchPullRequestsResult(success=True, statusCode=200, data=SearchPullRequestsData(**result))
         except Exception as exc:
-            tlog.failure("INTERNAL_ERROR", str(exc))
-            return json.dumps(ToolResult(
-                success=False, statusCode=500,
-                error=ToolError(code="INTERNAL_ERROR", message="Unexpected error while searching pull requests.", details={"exception": str(exc)}),
-            ).model_dump(mode="json"))
+            return _handle_service_exc(SearchPullRequestsResult, tlog, exc)
