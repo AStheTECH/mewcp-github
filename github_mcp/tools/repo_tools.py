@@ -1,11 +1,26 @@
 import json
 import logging
 from fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from ..schemas import ToolError, ToolResult
+from ..schemas import (
+    GetRepoData,
+    GetRepoResult,
+    UpdateRepositoryData,
+    UpdateRepositoryUpdateData,
+    UpdateRepositoryResult,
+    CreateRepositoryData,
+    CreateRepositoryResult,
+    ForkRepositoryData,
+    ForkRepositoryResult,
+    CreateOrUpdateFileData,
+    CreateOrUpdateFileResult,
+    PushFilesData,
+    PushFilesResult,
+)
 from ..logging_utils import ToolLogger
-from ._helpers import _err, _handle_request_exc, _upstream_err
+from ._helpers import _err, _handle_service_exc
 from ..service import (
     get_repo as get_repo_service,
     update_repository,
@@ -13,7 +28,6 @@ from ..service import (
     fork_repository,
     create_or_update_file,
     push_files,
-    GitHubServiceError,
 )
 
 logger = logging.getLogger("github-mcp-server")
@@ -24,34 +38,29 @@ def register_repo_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="get_repo",
         description="Get basic details for a GitHub repository.",
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True),
     )
     def get_repo(
         owner: str = Field(..., description="Repository owner, for example octocat"),
         repo: str = Field(..., description="Repository name"),
-    ) -> str:
+    ) -> GetRepoResult:
         tlog = ToolLogger(logger, "get_repo")
         try:
-            result = get_repo_service(owner, repo)
+            data = get_repo_service(owner, repo)
             tlog.success()
-            return json.dumps(ToolResult(success=True, statusCode=200, data=result).model_dump(mode="json"))
-        except GitHubServiceError as exc:
-            tlog.failure(exc.code, exc.message)
-            return json.dumps(ToolResult(
-                success=False,
-                statusCode=exc.http_status or 400,
-                error=ToolError(code=exc.code, message=exc.message, details=exc.details),
-            ).model_dump(mode="json"))
+            return GetRepoResult(success=True, statusCode=200, data=GetRepoData(**data))
         except Exception as exc:
-            tlog.failure("INTERNAL_ERROR", str(exc))
-            return json.dumps(ToolResult(
-                success=False,
-                statusCode=500,
-                error=ToolError(code="INTERNAL_ERROR", message="Unexpected error while processing get_repo.", details={"exception": str(exc)}),
-            ).model_dump(mode="json"))
+            return _handle_service_exc(GetRepoResult, tlog, exc)
 
     @mcp.tool(
         name="update_repository",
-        description="Update repository metadata or rename a repository.",
+        description=(
+            "Updates repository metadata or renames a repository. Only the fields you provide are "
+            "changed — others keep their current value. NOTE: this overwrites the current field "
+            "values — the original state is not stored after the call. The response includes both "
+            "the before and after state so you have a full record of what changed."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True),
     )
     def update_repository_tool(
         owner: str = Field(..., description="Repository owner"),
@@ -60,30 +69,39 @@ def register_repo_tools(mcp: FastMCP) -> None:
         description: str | None = Field(None, description="Repository description"),
         private: bool | None = Field(None, description="Make repository private/public"),
         default_branch: str | None = Field(None, description="Default branch name"),
-    ) -> str:
+    ) -> UpdateRepositoryResult:
         tlog = ToolLogger(logger, "update_repository")
+
+        if name is None and description is None and private is None and default_branch is None:
+            return _err(
+                UpdateRepositoryResult,
+                tlog,
+                "VALIDATION_ERROR",
+                "At least one field must be provided to update",
+                400,
+            )
+
         try:
-            data = update_repository(
+            before = get_repo_service(owner, repo)
+            after = update_repository(
                 owner=owner, repo=repo, name=name, description=description, private=private, default_branch=default_branch,
             )
             tlog.success()
-            return json.dumps(ToolResult(success=True, statusCode=200, data=data).model_dump(mode="json"))
-        except GitHubServiceError as exc:
-            tlog.failure(exc.code, exc.message)
-            return json.dumps(ToolResult(
-                success=False, statusCode=exc.http_status or 400,
-                error=ToolError(code=exc.code, message=exc.message, details=exc.details),
-            ).model_dump(mode="json"))
+            return UpdateRepositoryResult(
+                success=True,
+                statusCode=200,
+                data=UpdateRepositoryUpdateData(
+                    before=GetRepoData(**before),
+                    after=UpdateRepositoryData(**after),
+                ),
+            )
         except Exception as exc:
-            tlog.failure("INTERNAL_ERROR", str(exc))
-            return json.dumps(ToolResult(
-                success=False, statusCode=500,
-                error=ToolError(code="INTERNAL_ERROR", message="Unexpected error while updating repository.", details={"exception": str(exc)}),
-            ).model_dump(mode="json"))
+            return _handle_service_exc(UpdateRepositoryResult, tlog, exc)
 
     @mcp.tool(
         name="create_repository",
         description="Create a new GitHub repository in your personal account or an organization.",
+        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True),
     )
     def create_repository_tool(
         name: str = Field(..., description="Repository name (required). Must be unique in account/organization."),
@@ -92,7 +110,7 @@ def register_repo_tools(mcp: FastMCP) -> None:
         auto_init: bool = Field(False, description="Auto-initialize with README (default: False)."),
         gitignore_template: str | None = Field(None, description="Gitignore template name. Example: 'Python', 'Node'."),
         org: str | None = Field(None, description="Organization name to create repo in (optional)."),
-    ) -> str:
+    ) -> CreateRepositoryResult:
         tlog = ToolLogger(logger, "create_repository")
         try:
             data = create_repository(
@@ -100,50 +118,32 @@ def register_repo_tools(mcp: FastMCP) -> None:
                 gitignore_template=gitignore_template, org=org,
             )
             tlog.success()
-            return json.dumps(ToolResult(success=True, statusCode=200, data=data).model_dump(mode="json"))
-        except GitHubServiceError as exc:
-            tlog.failure(exc.code, exc.message)
-            return json.dumps(ToolResult(
-                success=False, statusCode=exc.http_status or 400,
-                error=ToolError(code=exc.code, message=exc.message, details=exc.details),
-            ).model_dump(mode="json"))
+            return CreateRepositoryResult(success=True, statusCode=200, data=CreateRepositoryData(**data))
         except Exception as exc:
-            tlog.failure("INTERNAL_ERROR", str(exc))
-            return json.dumps(ToolResult(
-                success=False, statusCode=500,
-                error=ToolError(code="INTERNAL_ERROR", message="Unexpected error while creating repository.", details={"exception": str(exc)}),
-            ).model_dump(mode="json"))
+            return _handle_service_exc(CreateRepositoryResult, tlog, exc)
 
     @mcp.tool(
         name="fork_repository",
         description="Fork a repository to your personal account or an organization.",
+        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True),
     )
     def fork_repository_tool(
         owner: str = Field(..., description="Original repository owner."),
         repo: str = Field(..., description="Original repository name."),
         org: str | None = Field(None, description="Organization name to fork into (optional)."),
-    ) -> str:
+    ) -> ForkRepositoryResult:
         tlog = ToolLogger(logger, "fork_repository")
         try:
             data = fork_repository(owner=owner, repo=repo, org=org)
             tlog.success()
-            return json.dumps(ToolResult(success=True, statusCode=200, data=data).model_dump(mode="json"))
-        except GitHubServiceError as exc:
-            tlog.failure(exc.code, exc.message)
-            return json.dumps(ToolResult(
-                success=False, statusCode=exc.http_status or 400,
-                error=ToolError(code=exc.code, message=exc.message, details=exc.details),
-            ).model_dump(mode="json"))
+            return ForkRepositoryResult(success=True, statusCode=200, data=ForkRepositoryData(**data))
         except Exception as exc:
-            tlog.failure("INTERNAL_ERROR", str(exc))
-            return json.dumps(ToolResult(
-                success=False, statusCode=500,
-                error=ToolError(code="INTERNAL_ERROR", message="Unexpected error while forking repository.", details={"exception": str(exc)}),
-            ).model_dump(mode="json"))
+            return _handle_service_exc(ForkRepositoryResult, tlog, exc)
 
     @mcp.tool(
         name="create_or_update_file",
         description="Create or update a file in a repository. Prevents accidental overwrites with SHA validation.",
+        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True),
     )
     def create_or_update_file_tool(
         owner: str = Field(..., description="Repository owner name."),
@@ -153,30 +153,21 @@ def register_repo_tools(mcp: FastMCP) -> None:
         message: str = Field(..., description="Commit message."),
         branch: str | None = Field(None, description="Target branch name (optional)."),
         sha: str | None = Field(None, description="File SHA for updates (optional)."),
-    ) -> str:
+    ) -> CreateOrUpdateFileResult:
         tlog = ToolLogger(logger, "create_or_update_file")
         try:
             data = create_or_update_file(
                 owner=owner, repo=repo, path=path, content=content, message=message, branch=branch, sha=sha,
             )
             tlog.success()
-            return json.dumps(ToolResult(success=True, statusCode=200, data=data).model_dump(mode="json"))
-        except GitHubServiceError as exc:
-            tlog.failure(exc.code, exc.message)
-            return json.dumps(ToolResult(
-                success=False, statusCode=exc.http_status or 400,
-                error=ToolError(code=exc.code, message=exc.message, details=exc.details),
-            ).model_dump(mode="json"))
+            return CreateOrUpdateFileResult(success=True, statusCode=200, data=CreateOrUpdateFileData(**data))
         except Exception as exc:
-            tlog.failure("INTERNAL_ERROR", str(exc))
-            return json.dumps(ToolResult(
-                success=False, statusCode=500,
-                error=ToolError(code="INTERNAL_ERROR", message="Unexpected error while creating or updating file.", details={"exception": str(exc)}),
-            ).model_dump(mode="json"))
+            return _handle_service_exc(CreateOrUpdateFileResult, tlog, exc)
 
     @mcp.tool(
         name="push_files",
         description="Push multiple files to a repository in a single atomic commit.",
+        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True),
     )
     def push_files_tool(
         owner: str = Field(..., description="Repository owner name."),
@@ -189,26 +180,20 @@ def register_repo_tools(mcp: FastMCP) -> None:
         branch: str | None = Field(None, description="Target branch name (optional)."),
         author_name: str | None = Field(None, description="Author name (optional)."),
         author_email: str | None = Field(None, description="Author email (optional)."),
-    ) -> str:
+    ) -> PushFilesResult:
         tlog = ToolLogger(logger, "push_files")
+
         try:
-            import json as json_lib
-            files = json_lib.loads(files_json)
+            files = json.loads(files_json)
+        except json.JSONDecodeError:
+            return _err(PushFilesResult, tlog, "VALIDATION_ERROR", "files_json is not valid JSON", 400)
+
+        try:
             data = push_files(
                 owner=owner, repo=repo, files=files, message=message,
                 branch=branch, author_name=author_name, author_email=author_email,
             )
             tlog.success()
-            return json.dumps(ToolResult(success=True, statusCode=200, data=data).model_dump(mode="json"))
-        except GitHubServiceError as exc:
-            tlog.failure(exc.code, exc.message)
-            return json.dumps(ToolResult(
-                success=False, statusCode=exc.http_status or 400,
-                error=ToolError(code=exc.code, message=exc.message, details=exc.details),
-            ).model_dump(mode="json"))
+            return PushFilesResult(success=True, statusCode=200, data=PushFilesData(**data))
         except Exception as exc:
-            tlog.failure("INTERNAL_ERROR", str(exc))
-            return json.dumps(ToolResult(
-                success=False, statusCode=500,
-                error=ToolError(code="INTERNAL_ERROR", message="Unexpected error while pushing files.", details={"exception": str(exc)}),
-            ).model_dump(mode="json"))
+            return _handle_service_exc(PushFilesResult, tlog, exc)
