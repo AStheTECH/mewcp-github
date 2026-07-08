@@ -2,8 +2,6 @@
 
 A Model Context Protocol (MCP) server that exposes GitHub's API for managing repositories, issues, pull requests, branches, releases, tags, branch protection, and repository rulesets.
 
-> **v2.0.0:** Tool responses changed from a JSON-encoded string to native typed structured objects. The `data` field on each tool response is now a typed model (one per tool) instead of an untyped dict serialized into a raw string.
-
 
 ## Overview
 
